@@ -31,7 +31,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build TaniGuide
         run: npm run build
