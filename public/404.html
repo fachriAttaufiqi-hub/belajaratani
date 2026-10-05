@@ -4,19 +4,21 @@
     <meta charset="utf-8">
     <title>TaniGuide</title>
     <script>
-      // Single Page Apps for GitHub Pages redirection script
-      var pathSegmentsToKeep = 1;
-      var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+      // Jika pengguna membuka /docs/ di browser secara manual:
+      // Misal: https://user.github.io/taniguide/docs/
+      // Otomatis arahkan kembali ke root aplikasi: https://user.github.io/taniguide/
+      var loc = window.location;
+      if (loc.pathname.includes('/docs')) {
+        var cleanPath = loc.pathname.replace(/\/docs(\/.*)?$/, '/');
+        loc.replace(loc.origin + cleanPath + loc.search + loc.hash);
+      } else {
+        var segments = loc.pathname.split('/').filter(Boolean);
+        var repoRoot = segments.length > 0 ? '/' + segments[0] + '/' : '/';
+        loc.replace(loc.origin + repoRoot + loc.search + loc.hash);
+      }
     </script>
   </head>
-  <body>
-    <p>Memuat TaniGuide...</p>
+  <body style="font-family: sans-serif; text-align: center; padding-top: 50px; color: #444;">
+    <p>Mengalihkan ke TaniGuide...</p>
   </body>
 </html>
