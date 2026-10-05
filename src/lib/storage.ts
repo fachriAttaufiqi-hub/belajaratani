@@ -248,6 +248,71 @@ export async function ensureCropsInSupabase(supabase: any) {
   }
 }
 
+export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: string): Promise<boolean> {
+  if (!supabase || !plantingId) return false;
+  try {
+    // 1. Pastikan seluruh master komoditas ada di tabel crops
+    await ensureCropsInSupabase(supabase);
+
+    // 2. Cek apakah planting sudah ada di database Supabase
+    const { data: pCheck, error: checkErr } = await supabase
+      .from('plantings')
+      .select('id')
+      .eq('id', plantingId)
+      .maybeSingle();
+
+    if (!checkErr && pCheck && pCheck.id) {
+      return true;
+    }
+
+    // 3. Ambil data planting dari localStorage
+    initLocalStorageIfEmpty();
+    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+    const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
+    let currentP = plantings.find(p => p.id === plantingId);
+
+    if (!currentP) {
+      currentP = {
+        id: plantingId,
+        crop_id: 'jagung',
+        crop_name: 'Jagung Hibrida / Manis',
+        variety: 'NK 212',
+        plot_name: 'Lahan Utama',
+        area_sqm: 1000,
+        planting_date: formatDate(new Date()),
+        estimated_harvest_date: addDays(formatDate(new Date()), 100),
+        status: 'active',
+        notes: 'Dibuat otomatis oleh sistem'
+      };
+      plantings.push(currentP);
+      localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
+    }
+
+    const plantingPayload = {
+      id: currentP.id,
+      crop_id: currentP.crop_id || 'jagung',
+      crop_name: currentP.crop_name || 'Tanaman',
+      variety: currentP.variety || 'Lokal',
+      plot_name: currentP.plot_name || 'Lahan',
+      area_sqm: Number(currentP.area_sqm) || 1000,
+      planting_date: currentP.planting_date || formatDate(new Date()),
+      estimated_harvest_date: currentP.estimated_harvest_date || addDays(formatDate(new Date()), 90),
+      status: currentP.status || 'active',
+      notes: currentP.notes || ''
+    };
+
+    const { error: upsertErr } = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
+    if (upsertErr) {
+      console.warn('Gagal upsert planting di Supabase:', upsertErr.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception di ensurePlantingExistsInSupabase:', err);
+    return false;
+  }
+}
+
 export const FarmDB = {
   // --- Plantings ---
   async getPlantings(): Promise<Planting[]> {
@@ -460,6 +525,9 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // Pastikan lahan terdaftar di Supabase sebelum insert task
+        await ensurePlantingExistsInSupabase(supabase, task.planting_id);
+
         const payload = {
           id: task.id,
           planting_id: task.planting_id,
@@ -548,27 +616,8 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Cek apakah planting sudah ada di Supabase untuk memenuhi Foreign Key
-        const { data: pCheck } = await supabase.from('plantings').select('id').eq('id', log.planting_id).maybeSingle();
-        if (!pCheck) {
-          // Buat placeholder planting di Supabase agar FK tidak gagal
-          const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-          const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
-          const currentP = plantings.find(p => p.id === log.planting_id);
-          if (currentP) {
-            await supabase.from('plantings').upsert([{
-              id: currentP.id,
-              crop_id: currentP.crop_id,
-              crop_name: currentP.crop_name,
-              variety: currentP.variety,
-              plot_name: currentP.plot_name,
-              area_sqm: currentP.area_sqm,
-              planting_date: currentP.planting_date,
-              estimated_harvest_date: currentP.estimated_harvest_date,
-              status: currentP.status || 'active'
-            }]);
-          }
-        }
+        // Pastikan plot/lahan terdaftar di Supabase sebelum insert log
+        await ensurePlantingExistsInSupabase(supabase, log.planting_id);
 
         const logPayload = {
           id: log.id,
@@ -669,26 +718,8 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Cek apakah planting sudah ada di Supabase
-        const { data: pCheck } = await supabase.from('plantings').select('id').eq('id', expense.planting_id).maybeSingle();
-        if (!pCheck) {
-          const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-          const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
-          const currentP = plantings.find(p => p.id === expense.planting_id);
-          if (currentP) {
-            await supabase.from('plantings').upsert([{
-              id: currentP.id,
-              crop_id: currentP.crop_id,
-              crop_name: currentP.crop_name,
-              variety: currentP.variety,
-              plot_name: currentP.plot_name,
-              area_sqm: currentP.area_sqm,
-              planting_date: currentP.planting_date,
-              estimated_harvest_date: currentP.estimated_harvest_date,
-              status: currentP.status || 'active'
-            }]);
-          }
-        }
+        // Pastikan plot/lahan terdaftar di Supabase sebelum insert expense
+        await ensurePlantingExistsInSupabase(supabase, expense.planting_id);
 
         const expensePayload = {
           id: expense.id,
