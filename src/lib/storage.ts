@@ -3,12 +3,33 @@ import { DEFAULT_CROPS } from '../data/defaultCrops';
 import { getSupabaseClient } from './supabase';
 
 const STORAGE_KEYS = {
-  PLANTINGS: 'taniguide_plantings_v2',
-  TASKS: 'taniguide_tasks_v2',
-  LOGS: 'taniguide_logs_v2',
-  EXPENSES: 'taniguide_expenses_v2',
-  INITIALIZED: 'taniguide_initialized_v2'
+  PLANTINGS: 'taniguide_plantings_v3',
+  TASKS: 'taniguide_tasks_v3',
+  LOGS: 'taniguide_logs_v3',
+  EXPENSES: 'taniguide_expenses_v3',
+  INITIALIZED: 'taniguide_initialized_v3'
 };
+
+// Clean legacy demo/mock data from previous versions if present
+(function cleanLegacyStorage() {
+  try {
+    const legacyKeys = [
+      'taniguide_plantings_v2',
+      'taniguide_tasks_v2',
+      'taniguide_logs_v2',
+      'taniguide_expenses_v2',
+      'taniguide_initialized_v2',
+      'taniguide_plantings',
+      'taniguide_tasks',
+      'taniguide_logs',
+      'taniguide_expenses',
+      'taniguide_initialized'
+    ];
+    legacyKeys.forEach(k => localStorage.removeItem(k));
+  } catch {
+    // ignore
+  }
+})();
 
 // Standard compliant UUID generator
 export function generateUUID(): string {
@@ -76,151 +97,13 @@ export function generateTasksForPlanting(planting: Planting): TaskItem[] {
   });
 }
 
-// Seed initial data with valid UUIDs
-function getInitialSeedData() {
-  const today = new Date();
-
-  // Plot 1: Jagung Hibrida (HST 14)
-  const jagungPlantDate = new Date(today);
-  jagungPlantDate.setDate(jagungPlantDate.getDate() - 14);
-  const jagungPlantStr = formatDate(jagungPlantDate);
-  const jagungHarvestStr = addDays(jagungPlantStr, 100);
-  const plot1Id = generateUUID();
-
-  const plot1: Planting = {
-    id: plot1Id,
-    crop_id: 'jagung',
-    crop_name: 'Jagung Hibrida / Manis',
-    variety: 'NK 212',
-    plot_name: 'Lahan Barat (Petak A)',
-    area_sqm: 2500,
-    planting_date: jagungPlantStr,
-    estimated_harvest_date: jagungHarvestStr,
-    status: 'active',
-    notes: 'Jarak tanam 70x20 cm, pupuk dasar kompos kandang 500 kg.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 2: Cabai Rawit (HST 28)
-  const cabaiPlantDate = new Date(today);
-  cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
-  const cabaiPlantStr = formatDate(cabaiPlantDate);
-  const cabaiHarvestStr = addDays(cabaiPlantStr, 85);
-  const plot2Id = generateUUID();
-
-  const plot2: Planting = {
-    id: plot2Id,
-    crop_id: 'cabai',
-    crop_name: 'Cabai Rawit / Merah',
-    variety: 'Ori 212',
-    plot_name: 'Kebun Mulsa Blok B',
-    area_sqm: 1200,
-    planting_date: cabaiPlantStr,
-    estimated_harvest_date: cabaiHarvestStr,
-    status: 'active',
-    notes: 'Bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 3: Padi Sawah (HST 45)
-  const padiPlantDate = new Date(today);
-  padiPlantDate.setDate(padiPlantDate.getDate() - 45);
-  const padiPlantStr = formatDate(padiPlantDate);
-  const padiHarvestStr = addDays(padiPlantStr, 110);
-  const plot3Id = generateUUID();
-
-  const plot3: Planting = {
-    id: plot3Id,
-    crop_id: 'padi',
-    crop_name: 'Padi Sawah',
-    variety: 'Inpari 32',
-    plot_name: 'Sawah Irigasi Desa C',
-    area_sqm: 5000,
-    planting_date: padiPlantStr,
-    estimated_harvest_date: padiHarvestStr,
-    status: 'active',
-    notes: 'Sistem jajar legowo 2:1, irigasi macak-macak berselang.',
-    created_at: new Date().toISOString()
-  };
-
-  const plantings = [plot1, plot2, plot3];
-  const tasks = [
-    ...generateTasksForPlanting(plot1),
-    ...generateTasksForPlanting(plot2),
-    ...generateTasksForPlanting(plot3)
-  ];
-
-  const logs: ActivityLog[] = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: formatDate(today),
-      type: 'catatan_lapangan',
-      title: 'Tinggi bibit jagung rata-rata 35 cm',
-      notes: 'Batang hijau segar, daun tampak kokoh setelah pemupukan susulan pertama dan pengairan sela parit.',
-      weather_condition: 'cerah'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: addDays(formatDate(today), -2),
-      type: 'hama_penyakit',
-      title: 'Ditemukan bercak daun di beberapa rumpun',
-      notes: 'Gejala awal thrips terdeteksi di ujung daun muda. Telah disemprot abamektin sore hari.',
-      weather_condition: 'berawan'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot3Id,
-      date: addDays(formatDate(today), -4),
-      type: 'cuaca',
-      title: 'Hujan lebat semalam, cek debit air sawah',
-      notes: 'Pintu air dibuka untuk membuang kelebihan genangan air agar tidak menenggelamkan anakan padi.',
-      weather_condition: 'hujan_deras'
-    }
-  ];
-
-  const expenses: ExpenseRecord[] = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: jagungPlantStr,
-      category: 'benih',
-      item_name: 'Benih Jagung NK 212 (5 kg)',
-      amount: 475000,
-      notes: 'Beli di toko pertanian Makmur Tani'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: addDays(jagungPlantStr, 10),
-      category: 'pupuk',
-      item_name: 'Pupuk Urea & Phonska (2 Karung)',
-      amount: 320000,
-      notes: 'Untuk pemupukan susulan I'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: cabaiPlantStr,
-      category: 'peralatan',
-      item_name: 'Mulsa Plastik & Bambu Ajir (200 btg)',
-      amount: 650000,
-      notes: 'Pemasangan bedengan kebun cabai'
-    }
-  ];
-
-  return { plantings, tasks, logs, expenses };
-}
-
 export function initLocalStorageIfEmpty() {
   const initialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
   if (!initialized) {
-    const seed = getInitialSeedData();
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(seed.plantings));
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(seed.tasks));
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(seed.logs));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(seed.expenses));
+    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
   }
 }
@@ -272,20 +155,7 @@ export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: 
     let currentP = plantings.find(p => p.id === plantingId);
 
     if (!currentP) {
-      currentP = {
-        id: plantingId,
-        crop_id: 'jagung',
-        crop_name: 'Jagung Hibrida / Manis',
-        variety: 'NK 212',
-        plot_name: 'Lahan Utama',
-        area_sqm: 1000,
-        planting_date: formatDate(new Date()),
-        estimated_harvest_date: addDays(formatDate(new Date()), 100),
-        status: 'active',
-        notes: 'Dibuat otomatis oleh sistem'
-      };
-      plantings.push(currentP);
-      localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
+      return false;
     }
 
     const plantingPayload = {
@@ -320,7 +190,7 @@ export const FarmDB = {
     if (supabase) {
       try {
         const { data, error } = await supabase.from('plantings').select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(data));
           return data;
         } else if (error) {
@@ -458,7 +328,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
+          if (!plantingId || plantingId === 'all') {
+            localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(data));
+          }
           return data;
         }
       } catch (err) {
@@ -585,7 +458,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
+          if (!plantingId || plantingId === 'all') {
+            localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data));
+          }
           return data;
         }
       } catch (err) {
@@ -687,7 +563,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
+          if (!plantingId || plantingId === 'all') {
+            localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(data));
+          }
           return data;
         }
       } catch (err) {
@@ -887,5 +766,26 @@ export const FarmDB = {
         count: { plantings: 0, tasks: 0, logs: 0, expenses: 0 }
       };
     }
+  },
+
+  async clearAllData(): Promise<{ success: boolean; error?: string }> {
+    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('plantings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (err: any) {
+        console.warn('Gagal bersihkan Supabase:', err);
+        return { success: false, error: err?.message };
+      }
+    }
+    return { success: true };
   }
 };

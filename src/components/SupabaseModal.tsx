@@ -13,7 +13,8 @@ import {
   ShieldCheck, 
   ExternalLink,
   Code2,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { SUPABASE_SQL_DDL } from '../lib/sqlSchema';
 import { getSavedSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../lib/supabase';
@@ -41,6 +42,20 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   // Sync state
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [clearing, setClearing] = useState<boolean>(false);
+
+  const handleClearData = async () => {
+    if (window.confirm('PERINGATAN: Kosongkan semua data lahan, jadwal, catatan, dan biaya di perangkat ini dan di Supabase?')) {
+      setClearing(true);
+      const res = await FarmDB.clearAllData();
+      setClearing(false);
+      onConnectionChanged();
+      setTestResult({
+        success: res.success,
+        message: res.success ? 'Tampilan & database telah dikosongkan secara total (0 data).' : `Gagal: ${res.error}`
+      });
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -345,23 +360,36 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 flex-wrap">
                 <button
                   type="button"
-                  onClick={handleBatchSync}
-                  disabled={syncing || !currentConfig.isConfigured}
-                  className="px-4 py-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  title="Kirim semua data plot, tugas, dan catatan lokal ke Supabase"
+                  onClick={handleClearData}
+                  disabled={clearing}
+                  className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  title="Kosongkan seluruh data lokal & Supabase"
                 >
-                  {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4 text-teal-600" />}
-                  <span>{syncing ? 'Menyinkronkan...' : 'Unggah & Sinkronkan Data Lokal ke Supabase'}</span>
+                  {clearing ? <RefreshCw className="w-4 h-4 animate-spin text-rose-600" /> : <Trash2 className="w-4 h-4 text-rose-600" />}
+                  <span>{clearing ? 'Mengosongkan...' : 'Kosongkan Semua Data'}</span>
                 </button>
 
-                <button
-                  type="submit"
-                  disabled={testing}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {testing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>{testing ? 'Menguji Koneksi...' : 'Uji & Simpan Koneksi'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBatchSync}
+                    disabled={syncing || !currentConfig.isConfigured}
+                    className="px-4 py-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    title="Kirim semua data plot, tugas, dan catatan lokal ke Supabase"
+                  >
+                    {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4 text-teal-600" />}
+                    <span>{syncing ? 'Menyinkronkan...' : 'Sinkronkan ke Cloud'}</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={testing}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {testing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    <span>{testing ? 'Menguji...' : 'Uji & Simpan Koneksi'}</span>
+                  </button>
+                </div>
               </div>
 
               {syncResult && (

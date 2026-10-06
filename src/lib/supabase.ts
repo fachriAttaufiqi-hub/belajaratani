@@ -4,9 +4,13 @@ import { DEFAULT_CROPS } from '../data/defaultCrops';
 const STORAGE_KEY_URL = 'taniguide_supabase_url';
 const STORAGE_KEY_KEY = 'taniguide_supabase_key';
 
+// Anda dapat mengisi kredensial Supabase di sini agar langsung aktif otomatis di GitHub Pages:
+export const DEFAULT_SUPABASE_URL = '';
+export const DEFAULT_SUPABASE_ANON_KEY = '';
+
 export function getSavedSupabaseConfig() {
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL || '';
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY || '';
 
   const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || envUrl;
   const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || envKey;
