@@ -26,9 +26,61 @@ export function saveSupabaseConfig(url: string, key: string) {
   if (url && key) {
     localStorage.setItem(STORAGE_KEY_URL, url.trim());
     localStorage.setItem(STORAGE_KEY_KEY, key.trim());
+    cachedClient = null;
+    lastUrl = '';
+    lastKey = '';
   } else {
     localStorage.removeItem(STORAGE_KEY_URL);
     localStorage.removeItem(STORAGE_KEY_KEY);
+    cachedClient = null;
+    lastUrl = '';
+    lastKey = '';
+  }
+}
+
+// Periksa apakah ada parameter sinkronisasi di URL (misal dibuka dari tautan gawai lain)
+export function checkAndApplyUrlSync(): { applied: boolean; message?: string } {
+  if (typeof window === 'undefined') return { applied: false };
+  try {
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+
+    let payload = '';
+    if (hash.includes('sync=')) {
+      const match = hash.match(/sync=([^&]+)/);
+      if (match) payload = match[1];
+    } else if (search.includes('sync=')) {
+      const match = search.match(/sync=([^&]+)/);
+      if (match) payload = match[1];
+    }
+
+    if (payload) {
+      const decoded = decodeURIComponent(atob(payload));
+      const [syncUrl, syncKey] = decoded.split('|');
+      if (syncUrl && syncKey) {
+        saveSupabaseConfig(syncUrl.trim(), syncKey.trim());
+        // Bersihkan parameter sync dari URL
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState(null, '', cleanUrl);
+        return { applied: true, message: 'Koneksi Supabase otomatis berhasil disinkronkan dari gawai sebelumnya!' };
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal membaca payload sinkronisasi URL:', err);
+  }
+  return { applied: false };
+}
+
+// Buat tautan berbagi konfigurasi Supabase untuk gawai lain
+export function generateSyncShareUrl(): string {
+  const { url, key, isConfigured } = getSavedSupabaseConfig();
+  if (!isConfigured) return '';
+  try {
+    const payload = btoa(encodeURIComponent(`${url.trim()}|${key.trim()}`));
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}#sync=${payload}`;
+  } catch {
+    return '';
   }
 }
 

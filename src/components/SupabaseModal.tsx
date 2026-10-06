@@ -11,13 +11,18 @@ import {
   AlertCircle, 
   Layers, 
   ShieldCheck, 
-  ExternalLink,
-  Code2,
-  RefreshCw,
-  Trash2
+  ExternalLink, 
+  Code2, 
+  RefreshCw, 
+  Trash2,
+  Smartphone,
+  Share2,
+  UploadCloud,
+  FileJson,
+  Link
 } from 'lucide-react';
 import { SUPABASE_SQL_DDL } from '../lib/sqlSchema';
-import { getSavedSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../lib/supabase';
+import { getSavedSupabaseConfig, saveSupabaseConfig, testSupabaseConnection, generateSyncShareUrl } from '../lib/supabase';
 import { FarmDB } from '../lib/storage';
 
 interface SupabaseModalProps {
@@ -34,10 +39,12 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const currentConfig = getSavedSupabaseConfig();
   const [url, setUrl] = useState<string>(currentConfig.url);
   const [key, setKey] = useState<string>(currentConfig.key);
-  const [activeTab, setActiveTab] = useState<'config' | 'sql' | 'architecture'>('sql');
+  const [activeTab, setActiveTab] = useState<'sync_device' | 'config' | 'sql' | 'architecture'>('sync_device');
   const [testing, setTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [linkCopied, setLinkCopied] = useState<boolean>(false);
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Sync state
   const [syncing, setSyncing] = useState<boolean>(false);
@@ -112,6 +119,44 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
     URL.revokeObjectURL(link.href);
   };
 
+  const handleCopySyncLink = () => {
+    const syncUrl = generateSyncShareUrl();
+    if (!syncUrl) {
+      alert('Konfigurasikan Supabase URL & Anon Key terlebih dahulu di tab "Pengaturan Koneksi API"!');
+      return;
+    }
+    navigator.clipboard.writeText(syncUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 3000);
+  };
+
+  const handleExportJson = async () => {
+    const json = await FarmDB.exportAllData();
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `taniguide_cadangan_${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const res = await FarmDB.importAllData(content);
+        setImportResult(res);
+        if (res.success) {
+          onConnectionChanged();
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
       <div className="bg-white rounded-3xl shadow-2xl border border-stone-200 w-full max-w-4xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
@@ -143,46 +188,174 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-stone-200 bg-stone-50 px-6 gap-3 shrink-0">
+        <div className="flex border-b border-stone-200 bg-stone-50 px-4 sm:px-6 gap-2 sm:gap-3 shrink-0 overflow-x-auto no-scrollbar">
           <button
-            onClick={() => setActiveTab('sql')}
-            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'sql'
+            onClick={() => setActiveTab('sync_device')}
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'sync_device'
                 ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
-            <Code2 className="w-4 h-4" />
-            <span>Skrip DDL SQL Supabase</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('architecture')}
-            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'architecture'
-                ? 'border-emerald-600 text-emerald-700'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Arsitektur & Skema Tabel</span>
+            <Smartphone className="w-4 h-4 text-emerald-600" />
+            <span>Sinkron Antar-Gawai</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">Solusi</span>
           </button>
 
           <button
             onClick={() => setActiveTab('config')}
-            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'config'
                 ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
             <Key className="w-4 h-4" />
-            <span>Pengaturan Koneksi API</span>
+            <span>Koneksi Supabase Cloud</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('sql')}
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'sql'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Code2 className="w-4 h-4" />
+            <span>Skrip DDL SQL</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('architecture')}
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'architecture'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Skema Tabel</span>
           </button>
         </div>
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
+
+          {/* TAB: SINKRONISASI ANTAR GAWAI & CADANGAN */}
+          {activeTab === 'sync_device' && (
+            <div className="space-y-5">
+              
+              {/* Status Banner */}
+              <div className={`p-4 sm:p-5 rounded-2xl border flex items-start gap-3.5 ${
+                currentConfig.isConfigured
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                  : 'bg-amber-50 border-amber-200 text-amber-950'
+              }`}>
+                {currentConfig.isConfigured ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <h4 className="font-extrabold text-sm sm:text-base">
+                    {currentConfig.isConfigured 
+                      ? 'Database Supabase Cloud Aktif di Gawai Ini!' 
+                      : 'Mengapa Aplikasi Kosong Saat Pindah Gawai?'}
+                  </h4>
+                  <p className="text-xs sm:text-sm mt-1 leading-relaxed opacity-90">
+                    {currentConfig.isConfigured 
+                      ? 'Koneksi Supabase sudah terhubung di browser gawai ini. Agar HP/laptop kedua Anda juga menampilkan data yang sama, salin tautan sinkronisasi di bawah dan buka di gawai tersebut!' 
+                      : 'Data Anda saat ini hanya tersimpan di memori browser (LocalStorage) gawai pertama ini. Karena belum terhubung ke database online Supabase, gawai lain Anda tidak bisa membaca data tersebut secara otomatis.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* CARD 1: Link Sinkronisasi 1-Klik */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 space-y-3">
+                <div className="flex items-center gap-2 text-stone-900 font-extrabold text-sm sm:text-base">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <Share2 className="w-4 h-4" />
+                  </div>
+                  <span>Solusi 1: Tautan Sinkronisasi Gawai 1-Klik (Paling Praktis)</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Cukup salin tautan di bawah ini dan kirimkan (misal via WhatsApp) ke HP/laptop kedua Anda. Saat tautan diketuk di gawai kedua, database Supabase akan langsung terkonfigurasi otomatis tanpa perlu mengetik ulang kredensial apa pun!
+                </p>
+
+                {currentConfig.isConfigured ? (
+                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <button
+                      onClick={handleCopySyncLink}
+                      className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                    >
+                      {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      <span>{linkCopied ? 'Tautan Berhasil Disalin! Siap Dikirim ke Gawai Lain' : 'Salin Tautan Sinkronisasi Gawai'}</span>
+                    </button>
+                    <span className="text-[11px] text-stone-500 text-center sm:text-left">
+                      Buka tautan ini di gawai lain agar langsung terhubung.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="pt-1">
+                    <button
+                      onClick={() => setActiveTab('config')}
+                      className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-xs"
+                    >
+                      <Key className="w-4 h-4" />
+                      <span>Hubungkan Supabase Dulu di Tab "Koneksi Supabase Cloud"</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 2: Cadangkan & Pindahkan Manual (JSON) */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 space-y-3">
+                <div className="flex items-center gap-2 text-stone-900 font-extrabold text-sm sm:text-base">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <FileJson className="w-4 h-4" />
+                  </div>
+                  <span>Solusi 2: Ekspor & Impor File Cadangan (Bisa Langsung Tanpa Supabase)</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Jika Anda belum sempat menyiapkan akun Supabase online, Anda bisa langsung memindahkan seluruh data lahan, jadwal, dan catatan ke gawai lain: unduh file cadangan dari gawai ini, lalu impor di gawai lain.
+                </p>
+
+                <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={handleExportJson}
+                    className="p-3.5 rounded-xl bg-white hover:bg-stone-100 border border-stone-300 text-stone-800 font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                  >
+                    <Download className="w-4 h-4 text-emerald-600" />
+                    <span>Unduh Cadangan Data (.json)</span>
+                  </button>
+
+                  <label className="p-3.5 rounded-xl bg-white hover:bg-stone-100 border border-stone-300 text-stone-800 font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs">
+                    <UploadCloud className="w-4 h-4 text-blue-600" />
+                    <span>Pulihkan / Impor File Cadangan</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {importResult && (
+                  <div className={`p-3 rounded-xl text-xs font-semibold border flex items-center gap-2 ${
+                    importResult.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                  }`}>
+                    {importResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                    <span>{importResult.message}</span>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
           
           {/* TAB 1: SQL SCRIPT VIEWER */}
           {activeTab === 'sql' && (

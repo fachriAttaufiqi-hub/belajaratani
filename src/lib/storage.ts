@@ -787,5 +787,63 @@ export const FarmDB = {
       }
     }
     return { success: true };
+  },
+
+  async exportAllData(): Promise<string> {
+    initLocalStorageIfEmpty();
+    const plantings = JSON.parse(localStorage.getItem(STORAGE_KEYS.PLANTINGS) || '[]');
+    const tasks = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) || '[]');
+    const logs = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS) || '[]');
+    const expenses = JSON.parse(localStorage.getItem(STORAGE_KEYS.EXPENSES) || '[]');
+
+    const backup = {
+      app: 'TaniGuide',
+      version: '3.0',
+      exportedAt: new Date().toISOString(),
+      plantings,
+      tasks,
+      logs,
+      expenses
+    };
+    return JSON.stringify(backup, null, 2);
+  },
+
+  async importAllData(jsonString: string): Promise<{ success: boolean; message: string; count?: any }> {
+    try {
+      const data = JSON.parse(jsonString);
+      if (!data || (!Array.isArray(data.plantings) && !Array.isArray(data.tasks))) {
+        return { success: false, message: 'Format data cadangan tidak dikenali.' };
+      }
+
+      const plantings: Planting[] = Array.isArray(data.plantings) ? data.plantings : [];
+      const tasks: TaskItem[] = Array.isArray(data.tasks) ? data.tasks : [];
+      const logs: ActivityLog[] = Array.isArray(data.logs) ? data.logs : [];
+      const expenses: ExpenseRecord[] = Array.isArray(data.expenses) ? data.expenses : [];
+
+      localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
+      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
+      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+      // Jika Supabase terhubung, otomatis unggah ke cloud
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await FarmDB.syncAllLocalToSupabase();
+      }
+
+      return {
+        success: true,
+        message: `Berhasil mengimpor ${plantings.length} lahan, ${tasks.length} tugas, ${logs.length} catatan, dan ${expenses.length} biaya!`,
+        count: {
+          plantings: plantings.length,
+          tasks: tasks.length,
+          logs: logs.length,
+          expenses: expenses.length
+        }
+      };
+    } catch (err: any) {
+      return { success: false, message: 'Gagal mengimpor: ' + (err?.message || 'Format JSON rusak') };
+    }
   }
 };

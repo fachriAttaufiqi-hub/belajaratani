@@ -8,7 +8,7 @@ import { NewPlantingModal } from './components/NewPlantingModal';
 import { FertilizerCalcModal } from './components/FertilizerCalcModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { FarmDB } from './lib/storage';
-import { getSavedSupabaseConfig } from './lib/supabase';
+import { getSavedSupabaseConfig, checkAndApplyUrlSync } from './lib/supabase';
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from './types';
 
 export default function App() {
@@ -54,6 +54,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const urlSync = checkAndApplyUrlSync();
+    if (urlSync.applied) {
+      showAppToast(urlSync.message || 'Koneksi Supabase otomatis disinkronkan!', 'success');
+    }
     loadData();
   }, [loadData]);
 
@@ -66,11 +70,11 @@ export default function App() {
     setActiveTab('schedule'); // Switch to schedule view to see the generated timeline immediately!
 
     if (syncedToSupabase) {
-      showAppToast(`Lahan "${savedPlanting.plot_name}" & ${newTasks.length} jadwal otomatis berhasil disimpan ke Supabase!`, 'success');
+      showAppToast(`Lahan "${savedPlanting.plot_name}" berhasil disimpan ke Cloud Supabase & bisa dibuka di semua gawai!`, 'success');
     } else if (error) {
-      showAppToast(`Lahan disimpan di lokal. Supabase: ${error}`, 'warning');
+      showAppToast(`Lahan disimpan di gawai ini saja. Error Supabase: ${error}`, 'warning');
     } else {
-      showAppToast(`Lahan "${savedPlanting.plot_name}" & ${newTasks.length} jadwal otomatis berhasil dibuat!`, 'success');
+      showAppToast(`Lahan "${savedPlanting.plot_name}" tersimpan di gawai ini (Lokal). Hubungkan Supabase agar otomatis muncul di gawai lain.`, 'warning');
     }
   };
 
