@@ -13,7 +13,8 @@ import {
   Sparkles,
   MapPin,
   Check,
-  Plus
+  Plus,
+  RotateCcw
 } from 'lucide-react';
 import { Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
@@ -29,6 +30,7 @@ interface DashboardViewProps {
   onNavigateToSchedule: () => void;
   onOpenNewPlanting: () => void;
   onDeletePlanting: (plotId: string) => void;
+  onRestoreMasterData?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -39,7 +41,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onToggleTask,
   onNavigateToSchedule,
   onOpenNewPlanting,
-  onDeletePlanting
+  onDeletePlanting,
+  onRestoreMasterData
 }) => {
   const todayStr = formatDate(new Date());
 
@@ -216,17 +219,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-stone-800">Belum ada lahan budidaya aktif</h3>
-                <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1">
-                  Mulai catat penanaman pertama Anda. Sistem akan membuatkan jadwal otomatis (HST) dari tanam hingga panen.
+                <p className="text-xs text-stone-500 max-w-md mx-auto mt-1 leading-relaxed">
+                  Data Anda baru saja terhapus saat membersihkan Google Chrome? Jangan khawatir! Anda dapat langsung memulihkan data budidaya lengkap (Padi, Jagung, Cabai beserta jadwal SOP dan catatan) dengan tombol di bawah.
                 </p>
               </div>
-              <button
-                onClick={onOpenNewPlanting}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-md hover:bg-emerald-700 transition"
-              >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                Tambah Lahan Sekarang
-              </button>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+                {onRestoreMasterData && (
+                  <button
+                    onClick={onRestoreMasterData}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4 stroke-[2.5]" />
+                    Pulihkan Data Master Pertanian
+                  </button>
+                )}
+                <button
+                  onClick={onOpenNewPlanting}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-md hover:bg-emerald-700 transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  Tambah Lahan Baru
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3.5">

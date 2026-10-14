@@ -19,7 +19,8 @@ import {
   Share2,
   UploadCloud,
   FileJson,
-  Link
+  Link,
+  RotateCcw
 } from 'lucide-react';
 import { SUPABASE_SQL_DDL } from '../lib/sqlSchema';
 import { getSavedSupabaseConfig, saveSupabaseConfig, testSupabaseConnection, generateSyncShareUrl } from '../lib/supabase';
@@ -280,21 +281,43 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                   <span>Solusi 1: Tautan Sinkronisasi Gawai 1-Klik (Paling Praktis)</span>
                 </div>
                 <p className="text-xs text-stone-600 leading-relaxed">
-                  Cukup salin tautan di bawah ini dan kirimkan (misal via WhatsApp) ke HP/laptop kedua Anda. Saat tautan diketuk di gawai kedua, database Supabase akan langsung terkonfigurasi otomatis tanpa perlu mengetik ulang kredensial apa pun!
+                  Cukup salin tautan di bawah ini atau pindai Kode QR langsung dari kamera smartphone Anda. Saat tautan dibuka di HP/tablet/laptop lain, database Supabase akan langsung terkonfigurasi otomatis tanpa perlu mengetik ulang kredensial apa pun!
                 </p>
 
                 {currentConfig.isConfigured ? (
-                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <button
-                      onClick={handleCopySyncLink}
-                      className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      <span>{linkCopied ? 'Tautan Berhasil Disalin! Siap Dikirim ke Gawai Lain' : 'Salin Tautan Sinkronisasi Gawai'}</span>
-                    </button>
-                    <span className="text-[11px] text-stone-500 text-center sm:text-left">
-                      Buka tautan ini di gawai lain agar langsung terhubung.
-                    </span>
+                  <div className="pt-2 space-y-4">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <button
+                        onClick={handleCopySyncLink}
+                        className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                      >
+                        {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        <span>{linkCopied ? 'Tautan Berhasil Disalin! Siap Dikirim ke HP Lain' : 'Salin Tautan Sinkronisasi Gawai'}</span>
+                      </button>
+                      <span className="text-[11px] text-stone-500 text-center sm:text-left">
+                        Kirim tautan ini via WhatsApp/Email ke gawai lain.
+                      </span>
+                    </div>
+
+                    {/* QR Code Scanner for Mobile */}
+                    <div className="p-4 rounded-xl bg-white border border-stone-200 flex flex-col sm:flex-row items-center gap-4">
+                      <div className="p-2 bg-stone-50 border border-stone-200 rounded-xl shrink-0">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=4&data=${encodeURIComponent(generateSyncShareUrl())}`}
+                          alt="QR Code Sinkronisasi Gawai"
+                          className="w-28 h-28 object-contain"
+                        />
+                      </div>
+                      <div className="space-y-1.5 text-center sm:text-left">
+                        <h5 className="font-extrabold text-xs sm:text-sm text-stone-900 flex items-center justify-center sm:justify-start gap-1.5">
+                          <Smartphone className="w-4 h-4 text-emerald-600" />
+                          <span>Pindai Langsung dengan Kamera HP</span>
+                        </h5>
+                        <p className="text-xs text-stone-600 leading-relaxed">
+                          Arahkan kamera smartphone Anda ke QR Code di atas. Ketuk tautan yang muncul untuk langsung membuka TaniGuide di HP dengan data yang sama persis dan tersinkronisasi realtime!
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="pt-1">
@@ -352,6 +375,54 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                     <span>{importResult.message}</span>
                   </div>
                 )}
+              </div>
+
+              {/* CARD 3: Pulihkan Data Master */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 space-y-3">
+                <div className="flex items-center gap-2 text-stone-900 font-extrabold text-sm sm:text-base">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <RotateCcw className="w-4 h-4" />
+                  </div>
+                  <span>Solusi 3: Pulihkan Master Data Budidaya Lengkap (1-Klik)</span>
+                </div>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Jika data Anda hilang karena baru saja menghapus data penjelajahan di Google Chrome, klik tombol di bawah untuk langsung memulihkan data budidaya lengkap (Padi Sawah Inpari 32, Jagung Hibrida NK 212, Cabai Rawit Ori 212 beserta puluhan jadwal SOP otomatis & buku kas).
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await FarmDB.restoreMasterData();
+                      onConnectionChanged();
+                      setTestResult({ success: res.success, message: res.message });
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm shadow-sm transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Pulihkan Seluruh Data Master Sekarang</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* CARD 4: Penjelasan Mengapa Data Hilang di Chrome & Perlindungan Sistem */}
+              <div className="bg-emerald-50/60 rounded-2xl p-5 border border-emerald-200 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-950 font-extrabold text-sm sm:text-base">
+                  <ShieldCheck className="w-5 h-5 text-emerald-700" />
+                  <span>Mengapa Data Terhapus Saat Bersihkan Chrome & Bagaimana Sistem Baru Melindunginya?</span>
+                </div>
+                <div className="space-y-2 text-xs text-stone-700 leading-relaxed">
+                  <p>
+                    <strong>1. Penyebab Data Terhapus di Google Chrome:</strong> Ketika opsi <em>"Hapus data penjelajahan / Clear browsing data"</em> di Google Chrome dicentang (khususnya Cookie dan Data Situs), browser menghapus seluruh penyimpanan lokal (LocalStorage). Jika website belum terhubung ke database online, data tersebut ikut terhapus bersama riwayat.
+                  </p>
+                  <p>
+                    <strong>2. Sistem Perlindungan Baru TaniGuide:</strong>
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 pl-1 text-stone-700">
+                    <li><strong>Cadangan Ganda (LocalStorage + IndexedDB):</strong> Aplikasi kini menyimpan data di dua lapisan penyimpanan browser yang terpisah.</li>
+                    <li><strong>Cloud Supabase (100% Kebal Hapus Chrome):</strong> Saat Anda menghubungkan Supabase, seluruh isian lahan, jadwal, dan catatan disimpan di server cloud. Mau browser Chrome direset atau di-uninstall, data Anda tetap aman dan utuh di cloud.</li>
+                    <li><strong>Sinkronisasi Instan Antar Gawai:</strong> Dengan tautan atau QR Code di atas, Anda bisa mengakses dan mengedit data yang sama dari gawai mana saja.</li>
+                  </ul>
+                </div>
               </div>
 
             </div>

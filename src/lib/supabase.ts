@@ -1,19 +1,47 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
+import { idbGet, idbSet, idbRemove } from './indexedDb';
 
 const STORAGE_KEY_URL = 'taniguide_supabase_url';
 const STORAGE_KEY_KEY = 'taniguide_supabase_key';
 
-// Anda dapat mengisi kredensial Supabase di sini agar langsung aktif otomatis di GitHub Pages:
+// Anda dapat mengisi kredensial Supabase di sini agar langsung aktif otomatis di GitHub Pages & semua gawai:
 export const DEFAULT_SUPABASE_URL = '';
 export const DEFAULT_SUPABASE_ANON_KEY = '';
+
+let inMemoryUrl = '';
+let inMemoryKey = '';
+
+// Inisialisasi konfigurasi dari IndexedDB jika localStorage sempat terhapus oleh Chrome
+export async function restoreSupabaseConfigFromIdb(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const savedUrl = localStorage.getItem(STORAGE_KEY_URL);
+    const savedKey = localStorage.getItem(STORAGE_KEY_KEY);
+    if (!savedUrl || !savedKey) {
+      const idbUrl = await idbGet<string>(STORAGE_KEY_URL);
+      const idbKey = await idbGet<string>(STORAGE_KEY_KEY);
+      if (idbUrl && idbKey) {
+        localStorage.setItem(STORAGE_KEY_URL, idbUrl);
+        localStorage.setItem(STORAGE_KEY_KEY, idbKey);
+        inMemoryUrl = idbUrl;
+        inMemoryKey = idbKey;
+        cachedClient = null;
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Gagal memulihkan config Supabase dari IndexedDB:', e);
+  }
+  return false;
+}
 
 export function getSavedSupabaseConfig() {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL || '';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY || '';
 
-  const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || envUrl;
-  const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || envKey;
+  const savedUrl = (typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY_URL) : null) || inMemoryUrl || envUrl;
+  const savedKey = (typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY_KEY) : null) || inMemoryKey || envKey;
 
   return {
     url: savedUrl,
@@ -23,18 +51,29 @@ export function getSavedSupabaseConfig() {
 }
 
 export function saveSupabaseConfig(url: string, key: string) {
-  if (url && key) {
-    localStorage.setItem(STORAGE_KEY_URL, url.trim());
-    localStorage.setItem(STORAGE_KEY_KEY, key.trim());
-    cachedClient = null;
-    lastUrl = '';
-    lastKey = '';
+  const cleanUrl = url ? url.trim() : '';
+  const cleanKey = key ? key.trim() : '';
+
+  inMemoryUrl = cleanUrl;
+  inMemoryKey = cleanKey;
+  cachedClient = null;
+  lastUrl = '';
+  lastKey = '';
+
+  if (cleanUrl && cleanKey) {
+    try {
+      localStorage.setItem(STORAGE_KEY_URL, cleanUrl);
+      localStorage.setItem(STORAGE_KEY_KEY, cleanKey);
+    } catch {}
+    idbSet(STORAGE_KEY_URL, cleanUrl).catch(() => {});
+    idbSet(STORAGE_KEY_KEY, cleanKey).catch(() => {});
   } else {
-    localStorage.removeItem(STORAGE_KEY_URL);
-    localStorage.removeItem(STORAGE_KEY_KEY);
-    cachedClient = null;
-    lastUrl = '';
-    lastKey = '';
+    try {
+      localStorage.removeItem(STORAGE_KEY_URL);
+      localStorage.removeItem(STORAGE_KEY_KEY);
+    } catch {}
+    idbRemove(STORAGE_KEY_URL).catch(() => {});
+    idbRemove(STORAGE_KEY_KEY).catch(() => {});
   }
 }
 
@@ -59,10 +98,13 @@ export function checkAndApplyUrlSync(): { applied: boolean; message?: string } {
       const [syncUrl, syncKey] = decoded.split('|');
       if (syncUrl && syncKey) {
         saveSupabaseConfig(syncUrl.trim(), syncKey.trim());
-        // Bersihkan parameter sync dari URL
-        const cleanUrl = window.location.pathname;
+        // Bersihkan parameter sync dari URL agar bersih
+        const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState(null, '', cleanUrl);
-        return { applied: true, message: 'Koneksi Supabase otomatis berhasil disinkronkan dari gawai sebelumnya!' };
+        return { 
+          applied: true, 
+          message: 'Koneksi Cloud Supabase otomatis disinkronkan ke gawai ini! Data lahan dan jadwal akan terhubung.' 
+        };
       }
     }
   } catch (err) {

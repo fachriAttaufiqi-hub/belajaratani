@@ -1,6 +1,7 @@
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from '../types';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
 import { getSupabaseClient } from './supabase';
+import { idbGet, idbSet, requestPersistentStorage } from './indexedDb';
 
 const STORAGE_KEYS = {
   PLANTINGS: 'taniguide_plantings_v3',
@@ -98,14 +99,47 @@ export function generateTasksForPlanting(planting: Planting): TaskItem[] {
 }
 
 export function initLocalStorageIfEmpty() {
-  const initialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
-  if (!initialized) {
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+  requestPersistentStorage().catch(() => {});
+  const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+  if (!rawPlantings || rawPlantings === '[]') {
+    const master = generateDefaultMasterDataset();
+    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(master.tasks));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(master.logs));
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(master.expenses));
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+    // Simpan juga ke IndexedDB agar tahan hapus Chrome
+    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
+    idbSet(STORAGE_KEYS.TASKS, master.tasks).catch(() => {});
+    idbSet(STORAGE_KEYS.LOGS, master.logs).catch(() => {});
+    idbSet(STORAGE_KEYS.EXPENSES, master.expenses).catch(() => {});
+
+    return master;
   }
+  return null;
+}
+
+export async function syncStorageFromIndexedDbIfEmpty(): Promise<boolean> {
+  try {
+    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+    if (!rawPlantings || rawPlantings === '[]') {
+      const idbPlantings = await idbGet<Planting[]>(STORAGE_KEYS.PLANTINGS);
+      if (idbPlantings && Array.isArray(idbPlantings) && idbPlantings.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(idbPlantings));
+        const idbTasks = await idbGet<TaskItem[]>(STORAGE_KEYS.TASKS);
+        if (idbTasks) localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(idbTasks));
+        const idbLogs = await idbGet<ActivityLog[]>(STORAGE_KEYS.LOGS);
+        if (idbLogs) localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(idbLogs));
+        const idbExpenses = await idbGet<ExpenseRecord[]>(STORAGE_KEYS.EXPENSES);
+        if (idbExpenses) localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(idbExpenses));
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Sync from IDB error:', e);
+  }
+  return false;
 }
 
 // Data Access Layer with Supabase + Local Storage Dual Layer
@@ -183,15 +217,204 @@ export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: 
   }
 }
 
+// Cached in-memory promise for fetch('/api/data') so multiple calls in Promise.all share 1 request
+let serverDataCache: any = null;
+let lastServerFetchTime = 0;
+
+export async function fetchServerData(): Promise<any | null> {
+  const now = Date.now();
+  if (serverDataCache && now - lastServerFetchTime < 1500) {
+    return serverDataCache;
+  }
+  try {
+    const res = await fetch('/api/data', { cache: 'no-store' });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success && json.data) {
+        serverDataCache = json.data;
+        lastServerFetchTime = now;
+        // Sync to localStorage as offline mirror
+        if (Array.isArray(json.data.plantings)) {
+          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(json.data.plantings));
+        }
+        if (Array.isArray(json.data.tasks)) {
+          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks));
+        }
+        if (Array.isArray(json.data.logs)) {
+          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(json.data.logs));
+        }
+        if (Array.isArray(json.data.expenses)) {
+          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(json.data.expenses));
+        }
+        return json.data;
+      }
+    }
+  } catch {
+    // API not available (e.g. running statically on GitHub Pages)
+  }
+  return null;
+}
+
+export function generateDefaultMasterDataset() {
+  const today = new Date();
+  const todayStr = formatDate(today);
+
+  // Plot 1: Jagung Hibrida (HST 14)
+  const jagungPlantDate = new Date(today);
+  jagungPlantDate.setDate(jagungPlantDate.getDate() - 14);
+  const jagungPlantStr = formatDate(jagungPlantDate);
+  const jagungHarvestStr = addDays(jagungPlantStr, 100);
+  const plot1Id = generateUUID();
+
+  const plot1: Planting = {
+    id: plot1Id,
+    crop_id: 'jagung',
+    crop_name: 'Jagung Hibrida / Manis',
+    variety: 'NK 212',
+    plot_name: 'Lahan Barat (Petak A)',
+    area_sqm: 2500,
+    planting_date: jagungPlantStr,
+    estimated_harvest_date: jagungHarvestStr,
+    status: 'active',
+    notes: 'Jarak tanam 70x20 cm, pupuk dasar kompos kandang 500 kg.',
+    created_at: new Date().toISOString()
+  };
+
+  // Plot 2: Cabai Rawit (HST 28)
+  const cabaiPlantDate = new Date(today);
+  cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
+  const cabaiPlantStr = formatDate(cabaiPlantDate);
+  const cabaiHarvestStr = addDays(cabaiPlantStr, 85);
+  const plot2Id = generateUUID();
+
+  const plot2: Planting = {
+    id: plot2Id,
+    crop_id: 'cabai',
+    crop_name: 'Cabai Rawit / Merah',
+    variety: 'Ori 212',
+    plot_name: 'Kebun Mulsa Blok B',
+    area_sqm: 1200,
+    planting_date: cabaiPlantStr,
+    estimated_harvest_date: cabaiHarvestStr,
+    status: 'active',
+    notes: 'Bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
+    created_at: new Date().toISOString()
+  };
+
+  // Plot 3: Padi Sawah (HST 45)
+  const padiPlantDate = new Date(today);
+  padiPlantDate.setDate(padiPlantDate.getDate() - 45);
+  const padiPlantStr = formatDate(padiPlantDate);
+  const padiHarvestStr = addDays(padiPlantStr, 110);
+  const plot3Id = generateUUID();
+
+  const plot3: Planting = {
+    id: plot3Id,
+    crop_id: 'padi',
+    crop_name: 'Padi Sawah',
+    variety: 'Inpari 32',
+    plot_name: 'Sawah Irigasi Desa C',
+    area_sqm: 5000,
+    planting_date: padiPlantStr,
+    estimated_harvest_date: padiHarvestStr,
+    status: 'active',
+    notes: 'Sistem jajar legowo 2:1, irigasi macak-macak berselang.',
+    created_at: new Date().toISOString()
+  };
+
+  const plantings = [plot1, plot2, plot3];
+  const tasks: TaskItem[] = [
+    ...generateTasksForPlanting(plot1),
+    ...generateTasksForPlanting(plot2),
+    ...generateTasksForPlanting(plot3)
+  ];
+
+  const logs: ActivityLog[] = [
+    {
+      id: generateUUID(),
+      planting_id: plot1Id,
+      date: todayStr,
+      type: 'catatan_lapangan',
+      title: 'Tinggi tanaman jagung rata-rata 40 cm',
+      notes: 'Batang hijau sehat, daun kokoh setelah pemupukan susulan pertama.',
+      weather_condition: 'cerah',
+      cost_amount: 0,
+      harvest_yield_kg: 0
+    },
+    {
+      id: generateUUID(),
+      planting_id: plot2Id,
+      date: addDays(todayStr, -2),
+      type: 'hama_penyakit',
+      title: 'Pantau serangga thrips & kutu kebul',
+      notes: 'Pucuk daun aman, daun muda tidak ada keriting.',
+      weather_condition: 'berawan',
+      cost_amount: 0,
+      harvest_yield_kg: 0
+    },
+    {
+      id: generateUUID(),
+      planting_id: plot3Id,
+      date: addDays(todayStr, -4),
+      type: 'cuaca',
+      title: 'Pengairan berselang pintu air sawah',
+      notes: 'Air sawah dikeringkan selama 3 hari untuk merangsang akar padi mendalam.',
+      weather_condition: 'cerah',
+      cost_amount: 0,
+      harvest_yield_kg: 0
+    }
+  ];
+
+  const expenses: ExpenseRecord[] = [
+    {
+      id: generateUUID(),
+      planting_id: plot1Id,
+      date: jagungPlantStr,
+      category: 'benih',
+      item_name: 'Benih Jagung Hibrida NK 212 (5 kg)',
+      amount: 475000,
+      notes: 'Toko Tani Makmur Sejahtera'
+    },
+    {
+      id: generateUUID(),
+      planting_id: plot1Id,
+      date: addDays(jagungPlantStr, 14),
+      category: 'pupuk',
+      item_name: 'Pupuk NPK Phonska & Urea (2 Karung)',
+      amount: 320000,
+      notes: 'Pemupukan susulan 1'
+    },
+    {
+      id: generateUUID(),
+      planting_id: plot2Id,
+      date: cabaiPlantStr,
+      category: 'peralatan',
+      item_name: 'Mulsa Plastik Hitam Perak & Ajir Bambu',
+      amount: 650000,
+      notes: 'Kebutuhan bedengan kebun cabai'
+    }
+  ];
+
+  return { plantings, tasks, logs, expenses };
+}
+
 export const FarmDB = {
   // --- Plantings ---
   async getPlantings(): Promise<Planting[]> {
+    // 1. Coba ambil dari Server Backend (Tahan Hapus Chrome & Sinkron Antar Gawai)
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.plantings) && serverData.plantings.length > 0) {
+      return serverData.plantings;
+    }
+
+    // 2. Coba ambil dari Supabase
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
         const { data, error } = await supabase.from('plantings').select('*').order('created_at', { ascending: false });
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(data));
+          idbSet(STORAGE_KEYS.PLANTINGS, data).catch(() => {});
           return data;
         } else if (error) {
           console.warn('Supabase query error (plantings):', error.message);
@@ -200,25 +423,41 @@ export const FarmDB = {
         console.warn('Fallback ke local storage untuk plantings:', err);
       }
     }
+
+    // 3. Coba pulihkan dari IndexedDB jika LocalStorage kosong/dihapus Chrome
+    await syncStorageFromIndexedDbIfEmpty();
+
+    // 4. Fallback ke Local Storage
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+
+    // 5. Jika masih kosong, otomatis pulihkan dataset master
+    const master = generateDefaultMasterDataset();
+    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
+    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
+    return master.plantings;
   },
 
   async addPlanting(planting: Planting): Promise<{ planting: Planting; tasks: TaskItem[]; syncedToSupabase: boolean; error?: string }> {
     const autoTasks = generateTasksForPlanting(planting);
 
-    // 1. Simpan di Local Storage
+    // 1. Simpan di Local Storage & IndexedDB
     initLocalStorageIfEmpty();
     const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
     const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
     plantings.unshift(planting);
     localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
+    idbSet(STORAGE_KEYS.PLANTINGS, plantings).catch(() => {});
 
     const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
     const tasks: TaskItem[] = rawTasks ? JSON.parse(rawTasks) : [];
     const updatedTasks = [...autoTasks, ...tasks];
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(updatedTasks));
+    idbSet(STORAGE_KEYS.TASKS, updatedTasks).catch(() => {});
 
     // 2. Simpan ke Supabase jika terhubung
     let synced = false;
@@ -272,33 +511,51 @@ export const FarmDB = {
       }
     }
 
+    // 3. Simpan ke Server Backend (Tahan Hapus Chrome & Sinkron Semua Gawai)
+    try {
+      fetch('/api/plantings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planting, tasks: autoTasks })
+      }).catch(() => {});
+    } catch {}
+
     return { planting, tasks: autoTasks, syncedToSupabase: synced, error: errMsg };
   },
 
   async deletePlanting(plantingId: string): Promise<{ success: boolean; error?: string }> {
+    // Hapus dari Server Backend
+    try {
+      fetch(`/api/plantings/${plantingId}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
     initLocalStorageIfEmpty();
     const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
     if (rawPlantings) {
       const filtered = JSON.parse(rawPlantings).filter((p: Planting) => p.id !== plantingId);
       localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.PLANTINGS, filtered).catch(() => {});
     }
 
     const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
     if (rawTasks) {
       const filtered = JSON.parse(rawTasks).filter((t: TaskItem) => t.planting_id !== plantingId);
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.TASKS, filtered).catch(() => {});
     }
 
     const rawLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
     if (rawLogs) {
       const filtered = JSON.parse(rawLogs).filter((l: ActivityLog) => l.planting_id !== plantingId);
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
     }
 
     const rawExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     if (rawExpenses) {
       const filtered = JSON.parse(rawExpenses).filter((e: ExpenseRecord) => e.planting_id !== plantingId);
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
     }
 
     const supabase = getSupabaseClient();
@@ -320,6 +577,14 @@ export const FarmDB = {
 
   // --- Tasks ---
   async getTasks(plantingId?: string): Promise<TaskItem[]> {
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.tasks.filter((t: any) => t.planting_id === plantingId);
+      }
+      return serverData.tasks;
+    }
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -328,9 +593,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(data));
+            idbSet(STORAGE_KEYS.TASKS, data).catch(() => {});
           }
           return data;
         }
@@ -339,9 +605,17 @@ export const FarmDB = {
       }
     }
 
+    await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
-    const tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
+    let tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
+    if (tasks.length === 0) {
+      const master = generateDefaultMasterDataset();
+      tasks = master.tasks;
+      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+      idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
+    }
+
     if (plantingId && plantingId !== 'all') {
       return tasks.filter(t => t.planting_id === plantingId);
     }
@@ -366,6 +640,16 @@ export const FarmDB = {
     };
 
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
+
+    // Update di Server Backend
+    try {
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_completed: isCompleted, completed_at: completedAt, completion_notes: notes })
+      }).catch(() => {});
+    } catch {}
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -392,6 +676,16 @@ export const FarmDB = {
     const tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
     tasks.unshift(task);
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
+
+    // Simpan ke Server Backend
+    try {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task)
+      }).catch(() => {});
+    } catch {}
 
     let synced = false;
     let errMsg = undefined;
@@ -428,12 +722,18 @@ export const FarmDB = {
   },
 
   async deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+    // Hapus dari Server Backend
+    try {
+      fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
     if (raw) {
       const tasks: TaskItem[] = JSON.parse(raw);
       const filtered = tasks.filter(t => t.id !== taskId);
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.TASKS, filtered).catch(() => {});
     }
 
     const supabase = getSupabaseClient();
@@ -450,6 +750,14 @@ export const FarmDB = {
 
   // --- Logs (Catatan Digital / Hama / Cuaca) ---
   async getLogs(plantingId?: string): Promise<ActivityLog[]> {
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.logs) && serverData.logs.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.logs.filter((l: any) => l.planting_id === plantingId);
+      }
+      return serverData.logs;
+    }
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -458,9 +766,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data));
+            idbSet(STORAGE_KEYS.LOGS, data).catch(() => {});
           }
           return data;
         }
@@ -469,9 +778,17 @@ export const FarmDB = {
       }
     }
 
+    await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
-    const logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
+    let logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
+    if (logs.length === 0) {
+      const master = generateDefaultMasterDataset();
+      logs = master.logs;
+      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
+      idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
+    }
+
     if (plantingId && plantingId !== 'all') {
       return logs.filter(l => l.planting_id === plantingId);
     }
@@ -479,12 +796,22 @@ export const FarmDB = {
   },
 
   async addLog(log: ActivityLog): Promise<{ log: ActivityLog; syncedToSupabase: boolean; error?: string }> {
-    // 1. Simpan di local storage
+    // 1. Simpan di local storage & IndexedDB
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
     const logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
     logs.unshift(log);
     localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
+    idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
+
+    // Simpan ke Server Backend
+    try {
+      fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log)
+      }).catch(() => {});
+    } catch {}
 
     // 2. Simpan di Supabase
     let synced = false;
@@ -524,13 +851,19 @@ export const FarmDB = {
   },
 
   async deleteLog(logId: string): Promise<{ success: boolean; error?: string }> {
-    // 1. Hapus dari local storage
+    // Hapus dari Server Backend
+    try {
+      fetch(`/api/logs/${logId}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
+    // 1. Hapus dari local storage & IndexedDB
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
     if (raw) {
       const logs: ActivityLog[] = JSON.parse(raw);
       const filtered = logs.filter(l => l.id !== logId);
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
     }
 
     // 2. Hapus dari Supabase
@@ -555,6 +888,14 @@ export const FarmDB = {
 
   // --- Expenses (Buku Kas & Biaya Operasional) ---
   async getExpenses(plantingId?: string): Promise<ExpenseRecord[]> {
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.expenses) && serverData.expenses.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.expenses.filter((e: any) => e.planting_id === plantingId);
+      }
+      return serverData.expenses;
+    }
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -563,9 +904,10 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(data));
+            idbSet(STORAGE_KEYS.EXPENSES, data).catch(() => {});
           }
           return data;
         }
@@ -574,9 +916,17 @@ export const FarmDB = {
       }
     }
 
+    await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-    const expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
+    let expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
+    if (expenses.length === 0) {
+      const master = generateDefaultMasterDataset();
+      expenses = master.expenses;
+      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+      idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
+    }
+
     if (plantingId && plantingId !== 'all') {
       return expenses.filter(e => e.planting_id === plantingId);
     }
@@ -584,12 +934,22 @@ export const FarmDB = {
   },
 
   async addExpense(expense: ExpenseRecord): Promise<{ expense: ExpenseRecord; syncedToSupabase: boolean; error?: string }> {
-    // 1. Simpan di local storage
+    // 1. Simpan di local storage & IndexedDB
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     const expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
     expenses.unshift(expense);
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
+
+    // Simpan ke Server Backend
+    try {
+      fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(expense)
+      }).catch(() => {});
+    } catch {}
 
     // 2. Simpan di Supabase
     let synced = false;
@@ -627,13 +987,19 @@ export const FarmDB = {
   },
 
   async deleteExpense(expenseId: string): Promise<{ success: boolean; error?: string }> {
-    // 1. Hapus dari local storage
+    // Hapus dari Server Backend
+    try {
+      fetch(`/api/expenses/${expenseId}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
+    // 1. Hapus dari local storage & IndexedDB
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     if (raw) {
       const expenses: ExpenseRecord[] = JSON.parse(raw);
       const filtered = expenses.filter(e => e.id !== expenseId);
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
+      idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
     }
 
     // 2. Hapus dari Supabase
@@ -769,10 +1135,20 @@ export const FarmDB = {
   },
 
   async clearAllData(): Promise<{ success: boolean; error?: string }> {
+    // Bersihkan di Server Backend
+    try {
+      await fetch('/api/data/clear-all', { method: 'POST' });
+      serverDataCache = { plantings: [], tasks: [], logs: [], expenses: [] };
+    } catch {}
+
     localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+    idbSet(STORAGE_KEYS.PLANTINGS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.TASKS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.LOGS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.EXPENSES, []).catch(() => {});
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -787,6 +1163,56 @@ export const FarmDB = {
       }
     }
     return { success: true };
+  },
+
+  async restoreMasterData(): Promise<{ success: boolean; message: string; data?: any }> {
+    try {
+      const res = await fetch('/api/data/restore-defaults', { method: 'POST' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(json.data.plantings || []));
+          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks || []));
+          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(json.data.logs || []));
+          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(json.data.expenses || []));
+          idbSet(STORAGE_KEYS.PLANTINGS, json.data.plantings || []).catch(() => {});
+          idbSet(STORAGE_KEYS.TASKS, json.data.tasks || []).catch(() => {});
+          idbSet(STORAGE_KEYS.LOGS, json.data.logs || []).catch(() => {});
+          idbSet(STORAGE_KEYS.EXPENSES, json.data.expenses || []).catch(() => {});
+          serverDataCache = json.data;
+          const supabase = getSupabaseClient();
+          if (supabase) {
+            await FarmDB.syncAllLocalToSupabase();
+          }
+          return {
+            success: true,
+            message: 'Data master pertanian (Padi Inpari 32, Jagung Hibrida, Cabai Rawit) beserta jadwal SOP lengkap berhasil dipulihkan!',
+            data: json.data
+          };
+        }
+      }
+    } catch {}
+
+    // Fallback locally
+    const master = generateDefaultMasterDataset();
+    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(master.tasks));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(master.logs));
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(master.expenses));
+    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
+    idbSet(STORAGE_KEYS.TASKS, master.tasks).catch(() => {});
+    idbSet(STORAGE_KEYS.LOGS, master.logs).catch(() => {});
+    idbSet(STORAGE_KEYS.EXPENSES, master.expenses).catch(() => {});
+    serverDataCache = master;
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await FarmDB.syncAllLocalToSupabase();
+    }
+    return {
+      success: true,
+      message: 'Data master pertanian berhasil dipulihkan di memori gawai!',
+      data: master
+    };
   },
 
   async exportAllData(): Promise<string> {
@@ -825,6 +1251,11 @@ export const FarmDB = {
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+      idbSet(STORAGE_KEYS.PLANTINGS, plantings).catch(() => {});
+      idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
+      idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
+      idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
 
       // Jika Supabase terhubung, otomatis unggah ke cloud
       const supabase = getSupabaseClient();

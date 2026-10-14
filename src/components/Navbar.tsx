@@ -10,7 +10,8 @@ import {
   Layers, 
   ChevronDown,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 import { Planting } from '../types';
 
@@ -24,6 +25,7 @@ interface NavbarProps {
   onOpenSupabaseModal: () => void;
   onOpenFertilizerCalc: () => void;
   isSupabaseConnected: boolean;
+  onRestoreMasterData?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -35,7 +37,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewPlanting,
   onOpenSupabaseModal,
   onOpenFertilizerCalc,
-  isSupabaseConnected
+  isSupabaseConnected,
+  onRestoreMasterData
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
@@ -117,6 +120,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Calculator className="w-4 h-4 text-emerald-600" />
               <span className="hidden md:inline">Hitung Pupuk</span>
             </button>
+
+            {/* Quick Restore Button (visible if plantings is empty) */}
+            {plantings.length === 0 && onRestoreMasterData && (
+              <button
+                onClick={onRestoreMasterData}
+                title="Pulihkan data pertanian master lengkap"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer animate-pulse transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Pulihkan Data</span>
+                <span className="sm:hidden">Pulihkan</span>
+              </button>
+            )}
 
             {/* Add New Planting Button */}
             <button
