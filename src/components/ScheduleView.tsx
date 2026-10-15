@@ -15,7 +15,8 @@ import {
   Calendar,
   Layers,
   ChevronRight,
-  Droplets
+  Droplets,
+  X
 } from 'lucide-react';
 import { Planting, TaskCategory, TaskItem } from '../types';
 import { formatDate, generateUUID } from '../lib/storage';
@@ -30,6 +31,8 @@ interface ScheduleViewProps {
   onAddTask: (task: TaskItem) => Promise<{ success: boolean; syncedToSupabase: boolean; error?: string }>;
   onDeleteTask: (taskId: string) => Promise<{ success: boolean; error?: string }>;
   onOpenNewPlanting: () => void;
+  onDeletePlanting?: (plotId: string) => void;
+  onOpenManagePlots?: () => void;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -40,14 +43,18 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onToggleTask,
   onAddTask,
   onDeleteTask,
-  onOpenNewPlanting
+  onOpenNewPlanting,
+  onDeletePlanting,
+  onOpenManagePlots
 }) => {
   const todayStr = formatDate(new Date());
+  const currentPlot = plantings.find(p => p.id === selectedPlotId);
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'today' | 'completed'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [taskToDelete, setTaskToDelete] = useState<TaskItem | null>(null);
+  const [plotToDelete, setPlotToDelete] = useState<Planting | null>(null);
   
   // Custom Task Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -146,6 +153,51 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   return (
     <div className="space-y-6 pb-12">
       
+      {/* Active Plot Filter & Delete Action */}
+      {selectedPlotId !== 'all' && currentPlot && (
+        <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+              🌾
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-base text-stone-900">{currentPlot.plot_name}</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900">
+                  {currentPlot.crop_name} ({currentPlot.variety})
+                </span>
+                <span className="text-xs text-stone-500 font-medium">
+                  {currentPlot.area_sqm} m²
+                </span>
+              </div>
+              <p className="text-xs text-stone-600 mt-1">
+                Tanggal Tanam: <strong>{currentPlot.planting_date}</strong> • Estimasi Panen: <strong>{currentPlot.estimated_harvest_date}</strong>
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            {onDeletePlanting && (
+              <button
+                type="button"
+                onClick={() => setPlotToDelete(currentPlot)}
+                className="px-3.5 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title={`Hapus lahan "${currentPlot.plot_name}"`}
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Hapus Lahan Ini</span>
+              </button>
+            )}
+            <button
+              onClick={() => onSelectPlot('all')}
+              className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs transition cursor-pointer"
+            >
+              Lihat Semua Lahan
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header & Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-stone-200/80 shadow-xs">
         <div>
@@ -163,6 +215,16 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {onOpenManagePlots && (
+            <button
+              onClick={onOpenManagePlots}
+              className="px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs sm:text-sm border border-stone-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Kelola & Hapus Lahan Pertanian"
+            >
+              <Layers className="w-4 h-4 text-emerald-600" />
+              <span>Kelola Lahan</span>
+            </button>
+          )}
           <button
             onClick={handleQuickAddWatering}
             className="px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs sm:text-sm transition flex items-center gap-1.5 cursor-pointer"
@@ -590,6 +652,84 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus Lahan */}
+      {plotToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlotToDelete(null)}
+                className="text-stone-400 hover:text-stone-600 p-1.5 rounded-xl hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-stone-900">
+                Hapus Lahan Pertanian?
+              </h3>
+              <p className="text-xs text-stone-500 mt-1">
+                Apakah Anda yakin ingin menghapus plot lahan berikut ini?
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2 text-xs">
+              <div className="flex justify-between font-bold text-stone-800">
+                <span>Nama Plot / Lahan:</span>
+                <span className="text-rose-700">{plotToDelete.plot_name}</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Komoditas Tanaman:</span>
+                <span className="font-semibold text-stone-800">{plotToDelete.crop_name} ({plotToDelete.variety})</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Luas Lahan:</span>
+                <span className="font-semibold text-stone-800">{plotToDelete.area_sqm} m²</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Tanggal Tanam:</span>
+                <span className="font-semibold text-stone-800">{plotToDelete.planting_date}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Peringatan:</strong> Seluruh jadwal SOP, checklist tugas, catatan log, dan data buku kas yang terhubung dengan lahan ini akan ikut dihapus.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPlotToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-stone-300 text-stone-700 font-bold text-xs hover:bg-stone-100 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeletePlanting) {
+                    onDeletePlanting(plotToDelete.id);
+                  }
+                  setPlotToDelete(null);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Lahan</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

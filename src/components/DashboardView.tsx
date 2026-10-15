@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Sprout, 
   Calendar, 
@@ -14,7 +14,10 @@ import {
   MapPin,
   Check,
   Plus,
-  RotateCcw
+  RotateCcw,
+  Trash2,
+  X,
+  Layers
 } from 'lucide-react';
 import { Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
@@ -30,6 +33,7 @@ interface DashboardViewProps {
   onNavigateToSchedule: () => void;
   onOpenNewPlanting: () => void;
   onDeletePlanting: (plotId: string) => void;
+  onOpenManagePlots?: () => void;
   onRestoreMasterData?: () => void;
 }
 
@@ -42,9 +46,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToSchedule,
   onOpenNewPlanting,
   onDeletePlanting,
+  onOpenManagePlots,
   onRestoreMasterData
 }) => {
   const todayStr = formatDate(new Date());
+  const [plantingToDelete, setPlantingToDelete] = useState<Planting | null>(null);
 
   // Filter tasks based on selected plot
   const activeTasks = selectedPlotId === 'all' 
@@ -202,14 +208,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {activePlantings.length}
               </span>
             </div>
-            {selectedPlotId !== 'all' && (
-              <button
-                onClick={() => onSelectPlot('all')}
-                className="text-xs font-bold text-emerald-700 hover:underline"
-              >
-                Lihat Semua Lahan
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onOpenManagePlots && (
+                <button
+                  type="button"
+                  onClick={onOpenManagePlots}
+                  className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200/90 text-stone-700 hover:text-emerald-800 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border border-stone-200/80 shadow-2xs"
+                  title="Kelola & Hapus Lahan Pertanian"
+                >
+                  <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Kelola Lahan</span>
+                </button>
+              )}
+              {selectedPlotId !== 'all' && (
+                <button
+                  onClick={() => onSelectPlot('all')}
+                  className="text-xs font-bold text-emerald-700 hover:underline"
+                >
+                  Lihat Semua Lahan
+                </button>
+              )}
+            </div>
           </div>
 
           {activePlantings.length === 0 ? (
@@ -318,15 +337,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             : 'Semua tugas budidaya telah diselesaikan! 🎉'}
                         </span>
                       </div>
-                      <button
-                        onClick={() => {
-                          onSelectPlot(planting.id);
-                          onNavigateToSchedule();
-                        }}
-                        className="font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 shrink-0"
-                      >
-                        Detail Jadwal <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPlantingToDelete(planting);
+                          }}
+                          title={`Hapus lahan pertanian "${planting.plot_name}"`}
+                          className="px-3 py-1.5 rounded-xl text-rose-700 bg-rose-50 hover:bg-rose-100 hover:text-rose-800 transition flex items-center gap-1.5 cursor-pointer border border-rose-200/90 shadow-2xs font-bold text-xs"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Hapus Lahan</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectPlot(planting.id);
+                            onNavigateToSchedule();
+                          }}
+                          className="font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 cursor-pointer"
+                        >
+                          Detail Jadwal <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -464,6 +498,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
       </div>
+
+      {/* Modal Konfirmasi Hapus Lahan */}
+      {plantingToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlantingToDelete(null)}
+                className="text-stone-400 hover:text-stone-600 p-1.5 rounded-xl hover:bg-stone-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-stone-900">
+                Hapus Lahan Pertanian?
+              </h3>
+              <p className="text-xs text-stone-500 mt-1">
+                Apakah Anda yakin ingin menghapus plot lahan berikut ini?
+              </p>
+            </div>
+
+            {/* Plot detail card */}
+            <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2 text-xs">
+              <div className="flex justify-between font-bold text-stone-800">
+                <span>Nama Plot / Lahan:</span>
+                <span className="text-rose-700">{plantingToDelete.plot_name}</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Komoditas Tanaman:</span>
+                <span className="font-semibold text-stone-800">{plantingToDelete.crop_name} ({plantingToDelete.variety})</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Luas Lahan:</span>
+                <span className="font-semibold text-stone-800">{plantingToDelete.area_sqm} m²</span>
+              </div>
+              <div className="flex justify-between text-stone-600">
+                <span>Tanggal Tanam:</span>
+                <span className="font-semibold text-stone-800">{plantingToDelete.planting_date}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Peringatan:</strong> Seluruh jadwal SOP, checklist tugas, catatan log, dan data buku kas yang terhubung dengan lahan ini akan ikut dihapus.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPlantingToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-stone-300 text-stone-700 font-bold text-xs hover:bg-stone-100 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeletePlanting(plantingToDelete.id);
+                  setPlantingToDelete(null);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Lahan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -7,6 +7,7 @@ import { GuideView } from './components/GuideView';
 import { NewPlantingModal } from './components/NewPlantingModal';
 import { FertilizerCalcModal } from './components/FertilizerCalcModal';
 import { SupabaseModal } from './components/SupabaseModal';
+import { ManagePlotsModal } from './components/ManagePlotsModal';
 import { FarmDB } from './lib/storage';
 import { getSavedSupabaseConfig, checkAndApplyUrlSync, restoreSupabaseConfigFromIdb } from './lib/supabase';
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from './types';
@@ -24,6 +25,7 @@ export default function App() {
   const [isNewPlantingOpen, setIsNewPlantingOpen] = useState<boolean>(false);
   const [isFertilizerCalcOpen, setIsFertilizerCalcOpen] = useState<boolean>(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [isManagePlotsOpen, setIsManagePlotsOpen] = useState<boolean>(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
   const [appToast, setAppToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
@@ -42,14 +44,17 @@ export default function App() {
         FarmDB.getExpenses()
       ]);
 
-      // Jika data kosong (misal baru saja dibersihkan oleh Chrome), otomatis pulihkan data master
+      // Jika data kosong karena baru dibersihkan browser Chrome (belum pernah diinisialisasi), otomatis pulihkan data master
       if (!allPlantings || allPlantings.length === 0) {
-        const restored = await FarmDB.restoreMasterData();
-        if (restored && restored.data) {
-          allPlantings = restored.data.plantings || [];
-          allTasks = restored.data.tasks || [];
-          allLogs = restored.data.logs || [];
-          allExpenses = restored.data.expenses || [];
+        const isInit = localStorage.getItem('taniguide_initialized');
+        if (!isInit) {
+          const restored = await FarmDB.restoreMasterData();
+          if (restored && restored.data) {
+            allPlantings = restored.data.plantings || [];
+            allTasks = restored.data.tasks || [];
+            allLogs = restored.data.logs || [];
+            allExpenses = restored.data.expenses || [];
+          }
         }
       }
 
@@ -96,16 +101,17 @@ export default function App() {
 
   // Handle deleting planting
   const handleDeletePlanting = async (plotId: string) => {
-    if (window.confirm('Yakin ingin menghapus plot lahan ini beserta seluruh jadwal dan catatannya?')) {
-      await FarmDB.deletePlanting(plotId);
-      setPlantings(prev => prev.filter(p => p.id !== plotId));
-      setTasks(prev => prev.filter(t => t.planting_id !== plotId));
-      setLogs(prev => prev.filter(l => l.planting_id !== plotId));
-      setExpenses(prev => prev.filter(e => e.planting_id !== plotId));
-      if (selectedPlotId === plotId) {
-        setSelectedPlotId('all');
-      }
+    const target = plantings.find(p => p.id === plotId);
+    const plotName = target ? target.plot_name : 'lahan';
+    await FarmDB.deletePlanting(plotId);
+    setPlantings(prev => prev.filter(p => p.id !== plotId));
+    setTasks(prev => prev.filter(t => t.planting_id !== plotId));
+    setLogs(prev => prev.filter(l => l.planting_id !== plotId));
+    setExpenses(prev => prev.filter(e => e.planting_id !== plotId));
+    if (selectedPlotId === plotId) {
+      setSelectedPlotId('all');
     }
+    showAppToast(`Lahan "${plotName}" beserta seluruh jadwal dan catatannya berhasil dihapus.`, 'success');
   };
 
   // Handle task completion toggle
@@ -212,6 +218,7 @@ export default function App() {
         onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
         onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
         onOpenFertilizerCalc={() => setIsFertilizerCalcOpen(true)}
+        onOpenManagePlots={() => setIsManagePlotsOpen(true)}
         isSupabaseConnected={isSupabaseConnected}
         onRestoreMasterData={handleRestoreMasterData}
       />
@@ -314,6 +321,7 @@ export default function App() {
             onNavigateToSchedule={() => setActiveTab('schedule')}
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
             onDeletePlanting={handleDeletePlanting}
+            onOpenManagePlots={() => setIsManagePlotsOpen(true)}
             onRestoreMasterData={handleRestoreMasterData}
           />
         )}
@@ -328,6 +336,8 @@ export default function App() {
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
+            onDeletePlanting={handleDeletePlanting}
+            onOpenManagePlots={() => setIsManagePlotsOpen(true)}
           />
         )}
 
@@ -384,6 +394,23 @@ export default function App() {
         isOpen={isNewPlantingOpen}
         onClose={() => setIsNewPlantingOpen(false)}
         onSavePlanting={handleSavePlanting}
+      />
+
+      <ManagePlotsModal
+        isOpen={isManagePlotsOpen}
+        onClose={() => setIsManagePlotsOpen(false)}
+        plantings={plantings}
+        tasks={tasks}
+        logs={logs}
+        expenses={expenses}
+        onSelectPlot={setSelectedPlotId}
+        onDeletePlanting={handleDeletePlanting}
+        onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
+        onNavigateToSchedule={(plotId) => {
+          setSelectedPlotId(plotId);
+          setActiveTab('schedule');
+        }}
+        onRestoreMasterData={handleRestoreMasterData}
       />
 
       <FertilizerCalcModal

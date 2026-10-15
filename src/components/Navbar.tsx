@@ -24,6 +24,7 @@ interface NavbarProps {
   onOpenNewPlanting: () => void;
   onOpenSupabaseModal: () => void;
   onOpenFertilizerCalc: () => void;
+  onOpenManagePlots?: () => void;
   isSupabaseConnected: boolean;
   onRestoreMasterData?: () => void;
 }
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewPlanting,
   onOpenSupabaseModal,
   onOpenFertilizerCalc,
+  onOpenManagePlots,
   isSupabaseConnected,
   onRestoreMasterData
 }) => {
@@ -65,9 +67,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Plot Filter Dropdown (Active Plot) */}
-          <div className="flex-1 max-w-xs sm:max-w-sm mx-2">
-            <div className="relative">
+          {/* Plot Filter Dropdown (Active Plot) & Manage Plots Button */}
+          <div className="flex-1 max-w-xs sm:max-w-md mx-2 flex items-center gap-1.5">
+            <div className="relative flex-1">
               <select
                 aria-label="Pilih Lahan / Plot"
                 value={selectedPlotId}
@@ -85,6 +87,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <ChevronDown className="w-4 h-4" />
               </div>
             </div>
+
+            {onOpenManagePlots && (
+              <button
+                type="button"
+                onClick={onOpenManagePlots}
+                title="Kelola & Hapus Lahan Pertanian"
+                className="px-2.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200/80 text-stone-700 hover:text-emerald-800 border border-stone-200 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <Layers className="w-4 h-4 text-emerald-600" />
+                <span className="hidden md:inline text-xs font-bold">Kelola Lahan</span>
+              </button>
+            )}
           </div>
 
           {/* Action Buttons */}

@@ -221,9 +221,14 @@ export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: 
 let serverDataCache: any = null;
 let lastServerFetchTime = 0;
 
-export async function fetchServerData(): Promise<any | null> {
+export function invalidateServerCache() {
+  serverDataCache = null;
+  lastServerFetchTime = 0;
+}
+
+export async function fetchServerData(forceRefresh = false): Promise<any | null> {
   const now = Date.now();
-  if (serverDataCache && now - lastServerFetchTime < 1500) {
+  if (!forceRefresh && serverDataCache && now - lastServerFetchTime < 1500) {
     return serverDataCache;
   }
   try {
@@ -513,23 +518,29 @@ export const FarmDB = {
 
     // 3. Simpan ke Server Backend (Tahan Hapus Chrome & Sinkron Semua Gawai)
     try {
-      fetch('/api/plantings', {
+      await fetch('/api/plantings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planting, tasks: autoTasks })
-      }).catch(() => {});
+      });
     } catch {}
+    invalidateServerCache();
 
     return { planting, tasks: autoTasks, syncedToSupabase: synced, error: errMsg };
   },
 
   async deletePlanting(plantingId: string): Promise<{ success: boolean; error?: string }> {
-    // Hapus dari Server Backend
-    try {
-      fetch(`/api/plantings/${plantingId}`, { method: 'DELETE' }).catch(() => {});
-    } catch {}
+    invalidateServerCache();
 
-    initLocalStorageIfEmpty();
+    // 1. Hapus dari Server Backend
+    try {
+      await fetch(`/api/plantings/${plantingId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Gagal delete di backend server:', err);
+    }
+    invalidateServerCache();
+
+    // 2. Hapus dari Local Storage & IndexedDB
     const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
     if (rawPlantings) {
       const filtered = JSON.parse(rawPlantings).filter((p: Planting) => p.id !== plantingId);
@@ -558,9 +569,16 @@ export const FarmDB = {
       idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
     }
 
+    // Tandai bahwa aplikasi sudah pernah diinisialisasi agar tidak otomatis mengembalikan tanaman default
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+    // 3. Hapus dari Supabase jika terhubung
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        try { await supabase.from('tasks').delete().eq('planting_id', plantingId); } catch {}
+        try { await supabase.from('activity_logs').delete().eq('planting_id', plantingId); } catch {}
+        try { await supabase.from('expenses').delete().eq('planting_id', plantingId); } catch {}
         const { error } = await supabase.from('plantings').delete().eq('id', plantingId);
         if (error) {
           console.error('Gagal delete planting di Supabase:', error);
