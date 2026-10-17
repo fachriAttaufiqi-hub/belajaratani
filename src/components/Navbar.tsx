@@ -106,22 +106,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Supabase status button */}
             <button
               onClick={onOpenSupabaseModal}
-              title={isSupabaseConnected ? "Cloud Supabase Aktif: Data tersimpan online & bisa disinkronkan ke semua gawai" : "Mode Offline: Klik untuk menghubungkan Supabase agar data muncul di gawai lain"}
+              title={isSupabaseConnected ? "Database Master Supabase Cloud Aktif & Terkunci — Sinkron Realtime ke Seluruh Gawai" : "Kunci Supabase Master: Simpan kunci sekali di server agar seluruh gawai otomatis terhubung"}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                 isSupabaseConnected
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-2xs'
-                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                  : 'bg-emerald-950 text-emerald-200 border-emerald-700 hover:bg-emerald-900'
               }`}
             >
-              <Database className={`w-3.5 h-3.5 ${isSupabaseConnected ? 'text-emerald-600' : 'text-amber-600'}`} />
+              <Database className={`w-3.5 h-3.5 ${isSupabaseConnected ? 'text-emerald-600' : 'text-emerald-400'}`} />
               <span className="hidden sm:inline font-bold">
-                {isSupabaseConnected ? 'Cloud Aktif' : 'Sinkronkan Cloud'}
+                {isSupabaseConnected ? 'Supabase Master' : 'Kunci Supabase'}
               </span>
               <span className="flex h-2 w-2 relative">
                 {isSupabaseConnected ? (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 ) : null}
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${isSupabaseConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isSupabaseConnected ? 'bg-emerald-500' : 'bg-emerald-400'}`}></span>
               </span>
             </button>
 

@@ -1,6 +1,6 @@
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from '../types';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, broadcastRealtimeChange } from './supabase';
 import { idbGet, idbSet, requestPersistentStorage } from './indexedDb';
 
 const STORAGE_KEYS = {
@@ -406,33 +406,33 @@ export function generateDefaultMasterDataset() {
 export const FarmDB = {
   // --- Plantings ---
   async getPlantings(): Promise<Planting[]> {
-    // 1. Coba ambil dari Server Backend (Tahan Hapus Chrome & Sinkron Antar Gawai)
+    // 1. SUPABASE MASTER (Sumber Kebenaran Utama Realtime & Antar Gawai)
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('plantings').select('*').order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(data));
+          idbSet(STORAGE_KEYS.PLANTINGS, data).catch(() => {});
+          return data;
+        } else if (error) {
+          console.warn('Supabase Master error (plantings):', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase Master connection error (plantings):', err);
+      }
+    }
+
+    // 2. Server Backend (Mirror Cadangan)
     const serverData = await fetchServerData();
     if (serverData && Array.isArray(serverData.plantings) && serverData.plantings.length > 0) {
       return serverData.plantings;
     }
 
-    // 2. Coba ambil dari Supabase
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('plantings').select('*').order('created_at', { ascending: false });
-        if (!error && Array.isArray(data) && data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(data));
-          idbSet(STORAGE_KEYS.PLANTINGS, data).catch(() => {});
-          return data;
-        } else if (error) {
-          console.warn('Supabase query error (plantings):', error.message);
-        }
-      } catch (err) {
-        console.warn('Fallback ke local storage untuk plantings:', err);
-      }
-    }
-
     // 3. Coba pulihkan dari IndexedDB jika LocalStorage kosong/dihapus Chrome
     await syncStorageFromIndexedDbIfEmpty();
 
-    // 4. Fallback ke Local Storage
+    // 4. Local Storage
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -440,7 +440,7 @@ export const FarmDB = {
       return parsed;
     }
 
-    // 5. Jika masih kosong, otomatis pulihkan dataset master
+    // 5. Jika benar-benar kosong, gunakan dataset master
     const master = generateDefaultMasterDataset();
     localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
     idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
@@ -526,6 +526,9 @@ export const FarmDB = {
     } catch {}
     invalidateServerCache();
 
+    // Broadcast Realtime Event ke seluruh perangkat yang sedang terbuka
+    broadcastRealtimeChange('plantings', 'INSERT', planting);
+
     return { planting, tasks: autoTasks, syncedToSupabase: synced, error: errMsg };
   },
 
@@ -572,7 +575,7 @@ export const FarmDB = {
     // Tandai bahwa aplikasi sudah pernah diinisialisasi agar tidak otomatis mengembalikan tanaman default
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
 
-    // 3. Hapus dari Supabase jika terhubung
+    // 3. Hapus dari Supabase Master jika terhubung
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -590,19 +593,15 @@ export const FarmDB = {
       }
     }
 
+    // Broadcast Realtime Delete Event ke perangkat lain
+    broadcastRealtimeChange('plantings', 'DELETE', { id: plantingId });
+
     return { success: true };
   },
 
   // --- Tasks ---
   async getTasks(plantingId?: string): Promise<TaskItem[]> {
-    const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
-      if (plantingId && plantingId !== 'all') {
-        return serverData.tasks.filter((t: any) => t.planting_id === plantingId);
-      }
-      return serverData.tasks;
-    }
-
+    // 1. SUPABASE MASTER
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -611,18 +610,30 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(data));
             idbSet(STORAGE_KEYS.TASKS, data).catch(() => {});
           }
           return data;
+        } else if (error) {
+          console.warn('Supabase Master error (tasks):', error.message);
         }
       } catch (err) {
-        console.warn('Fallback tasks ke lokal:', err);
+        console.warn('Supabase Master connection error (tasks):', err);
       }
     }
 
+    // 2. Server Backend Mirror
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.tasks.filter((t: any) => t.planting_id === plantingId);
+      }
+      return serverData.tasks;
+    }
+
+    // 3. Fallback
     await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
@@ -669,6 +680,7 @@ export const FarmDB = {
       }).catch(() => {});
     } catch {}
 
+    // Update di Supabase Master
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -684,6 +696,9 @@ export const FarmDB = {
         console.warn('Gagal update task di Supabase:', err);
       }
     }
+
+    // Broadcast Realtime Update Event
+    broadcastRealtimeChange('tasks', 'UPDATE', tasks[idx]);
 
     return tasks[idx];
   },
@@ -710,7 +725,6 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Pastikan lahan terdaftar di Supabase sebelum insert task
         await ensurePlantingExistsInSupabase(supabase, task.planting_id);
 
         const payload = {
@@ -736,6 +750,10 @@ export const FarmDB = {
         errMsg = err?.message;
       }
     }
+
+    // Broadcast Realtime Insert Event
+    broadcastRealtimeChange('tasks', 'INSERT', task);
+
     return { task, syncedToSupabase: synced, error: errMsg };
   },
 
@@ -763,19 +781,16 @@ export const FarmDB = {
         return { success: false, error: err?.message };
       }
     }
+
+    // Broadcast Realtime Delete Event
+    broadcastRealtimeChange('tasks', 'DELETE', { id: taskId });
+
     return { success: true };
   },
 
   // --- Logs (Catatan Digital / Hama / Cuaca) ---
   async getLogs(plantingId?: string): Promise<ActivityLog[]> {
-    const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.logs) && serverData.logs.length > 0) {
-      if (plantingId && plantingId !== 'all') {
-        return serverData.logs.filter((l: any) => l.planting_id === plantingId);
-      }
-      return serverData.logs;
-    }
-
+    // 1. SUPABASE MASTER
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -784,18 +799,30 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data));
             idbSet(STORAGE_KEYS.LOGS, data).catch(() => {});
           }
           return data;
+        } else if (error) {
+          console.warn('Supabase Master error (logs):', error.message);
         }
       } catch (err) {
-        console.warn('Fallback logs ke lokal:', err);
+        console.warn('Supabase Master connection error (logs):', err);
       }
     }
 
+    // 2. Server Backend Mirror
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.logs) && serverData.logs.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.logs.filter((l: any) => l.planting_id === plantingId);
+      }
+      return serverData.logs;
+    }
+
+    // 3. Fallback
     await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
@@ -831,13 +858,12 @@ export const FarmDB = {
       }).catch(() => {});
     } catch {}
 
-    // 2. Simpan di Supabase
+    // 2. Simpan di Supabase Master
     let synced = false;
     let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Pastikan plot/lahan terdaftar di Supabase sebelum insert log
         await ensurePlantingExistsInSupabase(supabase, log.planting_id);
 
         const logPayload = {
@@ -865,6 +891,9 @@ export const FarmDB = {
       }
     }
 
+    // Broadcast Realtime Insert Event
+    broadcastRealtimeChange('activity_logs', 'INSERT', log);
+
     return { log, syncedToSupabase: synced, error: errMsg };
   },
 
@@ -884,7 +913,7 @@ export const FarmDB = {
       idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
     }
 
-    // 2. Hapus dari Supabase
+    // 2. Hapus dari Supabase Master
     let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -901,19 +930,15 @@ export const FarmDB = {
       }
     }
 
+    // Broadcast Realtime Delete Event
+    broadcastRealtimeChange('activity_logs', 'DELETE', { id: logId });
+
     return { success: true };
   },
 
   // --- Expenses (Buku Kas & Biaya Operasional) ---
   async getExpenses(plantingId?: string): Promise<ExpenseRecord[]> {
-    const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.expenses) && serverData.expenses.length > 0) {
-      if (plantingId && plantingId !== 'all') {
-        return serverData.expenses.filter((e: any) => e.planting_id === plantingId);
-      }
-      return serverData.expenses;
-    }
-
+    // 1. SUPABASE MASTER
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -922,18 +947,30 @@ export const FarmDB = {
           query = query.eq('planting_id', plantingId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           if (!plantingId || plantingId === 'all') {
             localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(data));
             idbSet(STORAGE_KEYS.EXPENSES, data).catch(() => {});
           }
           return data;
+        } else if (error) {
+          console.warn('Supabase Master error (expenses):', error.message);
         }
       } catch (err) {
-        console.warn('Fallback expenses ke lokal:', err);
+        console.warn('Supabase Master connection error (expenses):', err);
       }
     }
 
+    // 2. Server Backend Mirror
+    const serverData = await fetchServerData();
+    if (serverData && Array.isArray(serverData.expenses) && serverData.expenses.length > 0) {
+      if (plantingId && plantingId !== 'all') {
+        return serverData.expenses.filter((e: any) => e.planting_id === plantingId);
+      }
+      return serverData.expenses;
+    }
+
+    // 3. Fallback
     await syncStorageFromIndexedDbIfEmpty();
     initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
@@ -969,13 +1006,12 @@ export const FarmDB = {
       }).catch(() => {});
     } catch {}
 
-    // 2. Simpan di Supabase
+    // 2. Simpan di Supabase Master
     let synced = false;
     let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Pastikan plot/lahan terdaftar di Supabase sebelum insert expense
         await ensurePlantingExistsInSupabase(supabase, expense.planting_id);
 
         const expensePayload = {
@@ -1001,6 +1037,9 @@ export const FarmDB = {
       }
     }
 
+    // Broadcast Realtime Insert Event
+    broadcastRealtimeChange('expenses', 'INSERT', expense);
+
     return { expense, syncedToSupabase: synced, error: errMsg };
   },
 
@@ -1020,7 +1059,7 @@ export const FarmDB = {
       idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
     }
 
-    // 2. Hapus dari Supabase
+    // 2. Hapus dari Supabase Master
     let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -1036,6 +1075,9 @@ export const FarmDB = {
         return { success: false, error: err?.message };
       }
     }
+
+    // Broadcast Realtime Delete Event
+    broadcastRealtimeChange('expenses', 'DELETE', { id: expenseId });
 
     return { success: true };
   },

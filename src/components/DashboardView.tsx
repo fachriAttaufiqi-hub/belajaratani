@@ -188,10 +188,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-xl sm:text-2xl font-black text-stone-900">
-            Otomatis Sync
+            Realtime Sync
           </div>
           <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            ✓ Database RLS & Offline-First
+            ✓ Supabase Cloud Master & Realtime
           </p>
         </div>
       </div>

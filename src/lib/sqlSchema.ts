@@ -156,4 +156,22 @@ DROP TRIGGER IF EXISTS set_tasks_updated_at ON public.tasks;
 CREATE TRIGGER set_tasks_updated_at
     BEFORE UPDATE ON public.tasks
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ====================================================================
+-- REALTIME REPLICATION (Sinkronisasi Realtime Antar Gawai)
+-- ====================================================================
+ALTER TABLE public.plantings REPLICA IDENTITY FULL;
+ALTER TABLE public.tasks REPLICA IDENTITY FULL;
+ALTER TABLE public.activity_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.expenses REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.plantings;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_logs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
+EXCEPTION WHEN OTHERS THEN
+    -- Lewati jika tabel sudah terdaftar di publication sebelumnya
+END $$;
 `;

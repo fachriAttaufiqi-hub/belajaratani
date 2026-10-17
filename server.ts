@@ -13,9 +13,50 @@ const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json());
 
-// Persistent Data Storage Path
+// Persistent Data Storage Path & Locked Supabase Config
 const DATA_DIR = path.resolve(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'taniguide_database.json');
+const SUPABASE_CONFIG_FILE = path.join(DATA_DIR, 'supabase_config.json');
+
+function readSupabaseConfig() {
+  try {
+    if (fs.existsSync(SUPABASE_CONFIG_FILE)) {
+      const content = fs.readFileSync(SUPABASE_CONFIG_FILE, 'utf-8');
+      const json = JSON.parse(content);
+      if (json && (json.url || json.key)) {
+        return {
+          url: json.url || '',
+          key: json.key || '',
+          isLocked: Boolean(json.url && json.key)
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Error reading supabase config:', e);
+  }
+  const envUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const envKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  return {
+    url: envUrl,
+    key: envKey,
+    isLocked: Boolean(envUrl && envKey)
+  };
+}
+
+function writeSupabaseConfig(url: string, key: string) {
+  try {
+    const payload = {
+      url: url.trim(),
+      key: key.trim(),
+      updated_at: new Date().toISOString()
+    };
+    fs.writeFileSync(SUPABASE_CONFIG_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Error writing supabase config:', err);
+    return false;
+  }
+}
 
 // Ensure data folder exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -336,6 +377,32 @@ function writeDatabase(data: any) {
 }
 
 // --- REST API Endpoints ---
+ 
+// GET locked Supabase configuration (Syncs to all devices automatically)
+app.get('/api/config/supabase', (_req, res) => {
+  const config = readSupabaseConfig();
+  res.json({
+    success: true,
+    data: config
+  });
+});
+
+// POST lock Supabase configuration permanently for all devices
+app.post('/api/config/supabase', (req, res) => {
+  const { url, key } = req.body;
+  if (!url || !key) {
+    return res.status(400).json({ success: false, message: 'URL dan Key Supabase wajib diisi' });
+  }
+  const ok = writeSupabaseConfig(url, key);
+  if (!ok) {
+    return res.status(500).json({ success: false, message: 'Gagal menyimpan konfigurasi ke disk server' });
+  }
+  res.json({
+    success: true,
+    message: 'Konfigurasi Supabase berhasil dikunci di server! Semua gawai otomatis terhubung.',
+    data: { url: url.trim(), key: key.trim(), isLocked: true }
+  });
+});
 
 // GET all data (Syncs to all devices & survives Chrome clear data)
 app.get('/api/data', (_req, res) => {

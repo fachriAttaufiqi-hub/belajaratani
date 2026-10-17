@@ -9,9 +9,9 @@ import { FertilizerCalcModal } from './components/FertilizerCalcModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { ManagePlotsModal } from './components/ManagePlotsModal';
 import { FarmDB } from './lib/storage';
-import { getSavedSupabaseConfig, checkAndApplyUrlSync, restoreSupabaseConfigFromIdb } from './lib/supabase';
+import { getSavedSupabaseConfig, checkAndApplyUrlSync, syncSupabaseConfigFromAllSources, subscribeToSupabaseRealtime } from './lib/supabase';
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from './types';
-import { Smartphone, ShieldCheck, Download, RotateCcw } from 'lucide-react';
+import { Smartphone, ShieldCheck, Download, RotateCcw, Key, Sparkles, Radio } from 'lucide-react';
 
 export default function App() {
   const [plantings, setPlantings] = useState<Planting[]>([]);
@@ -34,29 +34,15 @@ export default function App() {
     setTimeout(() => setAppToast(null), 4000);
   };
 
-  // Load all data with auto-restoration if empty
+  // Load all data from Supabase Master
   const loadData = useCallback(async () => {
     try {
-      let [allPlantings, allTasks, allLogs, allExpenses] = await Promise.all([
+      const [allPlantings, allTasks, allLogs, allExpenses] = await Promise.all([
         FarmDB.getPlantings(),
         FarmDB.getTasks(),
         FarmDB.getLogs(),
         FarmDB.getExpenses()
       ]);
-
-      // Jika data kosong karena baru dibersihkan browser Chrome (belum pernah diinisialisasi), otomatis pulihkan data master
-      if (!allPlantings || allPlantings.length === 0) {
-        const isInit = localStorage.getItem('taniguide_initialized');
-        if (!isInit) {
-          const restored = await FarmDB.restoreMasterData();
-          if (restored && restored.data) {
-            allPlantings = restored.data.plantings || [];
-            allTasks = restored.data.tasks || [];
-            allLogs = restored.data.logs || [];
-            allExpenses = restored.data.expenses || [];
-          }
-        }
-      }
 
       setPlantings(allPlantings);
       setTasks(allTasks);
@@ -66,21 +52,59 @@ export default function App() {
       const config = getSavedSupabaseConfig();
       setIsSupabaseConnected(config.isConfigured);
     } catch (err) {
-      console.error('Gagal memuat data pertanian:', err);
+      console.error('Gagal memuat data pertanian dari Supabase Master:', err);
     }
   }, []);
 
   useEffect(() => {
+    let unsubscribeRealtime: (() => void) | null = null;
+    let isMounted = true;
+
     async function init() {
-      await restoreSupabaseConfigFromIdb();
+      // 1. Ambil config Supabase yang terkunci di Server Backend (semua gawai otomatis terhubung)
+      const configRes = await syncSupabaseConfigFromAllSources();
+      if (!isMounted) return;
+      setIsSupabaseConnected(configRes.isConfigured);
+
+      // 2. Periksa parameter sync URL jika ada
       const urlSync = checkAndApplyUrlSync();
       if (urlSync.applied) {
-        showAppToast(urlSync.message || 'Koneksi Supabase otomatis disinkronkan!', 'success');
+        showAppToast(urlSync.message || 'Koneksi Supabase otomatis dikunci!', 'success');
       }
+
+      // 3. Muat data awal dari Supabase Master
       await loadData();
+
+      // 4. Langganan Realtime Supabase untuk sinkronisasi otomatis antar-perangkat seketika
+      let reloadTimeout: any = null;
+      unsubscribeRealtime = subscribeToSupabaseRealtime((table) => {
+        if (!isMounted) return;
+        console.log(`⚡ [Realtime Update Received]: ${table}`);
+        if (reloadTimeout) clearTimeout(reloadTimeout);
+        reloadTimeout = setTimeout(() => {
+          loadData();
+        }, 150);
+      });
     }
+
     init();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribeRealtime) {
+        unsubscribeRealtime();
+      }
+    };
   }, [loadData]);
+
+  const handleConnectionChanged = async () => {
+    const configRes = await syncSupabaseConfigFromAllSources();
+    setIsSupabaseConnected(configRes.isConfigured);
+    await loadData();
+    subscribeToSupabaseRealtime(() => {
+      loadData();
+    });
+  };
 
   // Handle adding new planting + auto generated schedule
   const handleSavePlanting = async (planting: Planting) => {
@@ -91,11 +115,11 @@ export default function App() {
     setActiveTab('schedule'); // Switch to schedule view to see the generated timeline immediately!
 
     if (syncedToSupabase) {
-      showAppToast(`Lahan "${savedPlanting.plot_name}" berhasil disimpan ke Cloud Supabase & bisa dibuka di semua gawai!`, 'success');
+      showAppToast(`Lahan "${savedPlanting.plot_name}" berhasil disimpan ke Supabase Master & tersinkronisasi ke seluruh gawai!`, 'success');
     } else if (error) {
-      showAppToast(`Lahan disimpan di gawai ini saja. Error Supabase: ${error}`, 'warning');
+      showAppToast(`Lahan tersimpan. Status Supabase: ${error}`, 'warning');
     } else {
-      showAppToast(`Lahan "${savedPlanting.plot_name}" tersimpan di gawai ini (Lokal). Hubungkan Supabase agar otomatis muncul di gawai lain.`, 'warning');
+      showAppToast(`Lahan "${savedPlanting.plot_name}" berhasil dibuat.`, 'success');
     }
   };
 
@@ -245,67 +269,63 @@ export default function App() {
           </div>
         )}
 
-        {/* Device Sync & Data Protection Bar */}
-        <div className={`rounded-2xl p-3 sm:p-4 border transition-all ${
+        {/* Cloud Supabase Master & Realtime Multi-Device Bar */}
+        <div className={`rounded-3xl p-4 sm:p-5 border transition-all ${
           isSupabaseConnected 
-            ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950 shadow-2xs' 
-            : 'bg-amber-50/90 border-amber-200/90 text-amber-950 shadow-2xs'
+            ? 'bg-linear-to-r from-emerald-950 via-teal-950 to-stone-900 text-white border-emerald-500/40 shadow-lg' 
+            : 'bg-linear-to-r from-stone-900 via-stone-800 to-amber-950 text-white border-amber-500/40 shadow-lg'
         }`}>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-start sm:items-center gap-2.5">
-              <div className={`p-2 rounded-xl shrink-0 ${isSupabaseConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                {isSupabaseConnected ? <ShieldCheck className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className={`p-3 rounded-2xl shrink-0 ${
+                isSupabaseConnected 
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' 
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+              }`}>
+                {isSupabaseConnected ? <ShieldCheck className="w-6 h-6 text-emerald-400" /> : <Key className="w-6 h-6 text-amber-400" />}
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-extrabold text-xs sm:text-sm">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="font-extrabold text-sm sm:text-base tracking-tight">
                     {isSupabaseConnected 
-                      ? 'Cloud Supabase Aktif: Data Aman dari Hapus Chrome & Terhubung di Semua HP' 
-                      : 'Proteksi Data Ganda Aktif (LocalStorage + IndexedDB)'}
+                      ? 'Supabase Cloud Master Aktif • Terkunci Otomatis untuk Semua Gawai' 
+                      : 'Kunci Supabase untuk Seluruh Gawai (Tidak Perlu Masukkan Kunci Lagi)'}
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isSupabaseConnected ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-900'
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+                    isSupabaseConnected ? 'bg-emerald-500 text-stone-950' : 'bg-amber-400 text-stone-950'
                   }`}>
-                    {isSupabaseConnected ? 'Cloud Online' : 'Mode Offline'}
+                    <span className="w-1.5 h-1.5 rounded-full bg-stone-950 animate-ping"></span>
+                    {isSupabaseConnected ? '⚡ Realtime Master' : 'Perlu Kunci'}
                   </span>
                 </div>
-                <p className="text-[11px] sm:text-xs opacity-90 mt-0.5 leading-relaxed">
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed max-w-3xl">
                   {isSupabaseConnected
-                    ? 'Data lahan, jadwal, dan catatan tersimpan aman di cloud. Gunakan tautan atau QR Code untuk menyinkronkan ke HP/tablet Anda.'
-                    : 'Data Anda sekarang dilindungi cadangan otomatis agar tidak hilang saat Google Chrome dibersihkan. Hubungkan Supabase agar otomatis sama di HP lain.'}
+                    ? 'Data di Supabase menjadi master tunggal. Seluruh perangkat (HP, laptop, tablet) tersinkronisasi realtime seketika tanpa perlu memasukkan kunci lagi.'
+                    : 'Kunci Supabase URL dan Anon Key satu kali di sini agar tersimpan permanen di server & dapat dibuka langsung di seluruh gawai Anda.'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+            <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
               <button
                 onClick={() => setIsSupabaseModalOpen(true)}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition ${
+                className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 cursor-pointer shadow-md transition active:scale-95 ${
                   isSupabaseConnected
-                    ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                    : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-stone-950'
+                    : 'bg-amber-400 hover:bg-amber-300 text-stone-950'
                 }`}
               >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>{isSupabaseConnected ? 'Buka di HP Lain' : 'Sinkronkan ke Gawai Lain'}</span>
+                <Key className="w-3.5 h-3.5" />
+                <span>{isSupabaseConnected ? 'Kelola Kunci Supabase' : 'Kunci Supabase Sekarang'}</span>
               </button>
 
               <button
                 onClick={handleQuickExportBackup}
                 title="Unduh file cadangan data JSON"
-                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
+                className="px-3.5 py-2.5 rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
               >
-                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">Cadangan JSON</span>
-              </button>
-
-              <button
-                onClick={handleRestoreMasterData}
-                title="Pulihkan seluruh data master pertanian"
-                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Pulihkan Master</span>
               </button>
             </div>
           </div>
@@ -421,7 +441,7 @@ export default function App() {
       <SupabaseModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
-        onConnectionChanged={loadData}
+        onConnectionChanged={handleConnectionChanged}
       />
 
     </div>
