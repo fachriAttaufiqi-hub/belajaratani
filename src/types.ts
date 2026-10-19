@@ -29,14 +29,18 @@ export interface TaskTemplate {
   priority: 'low' | 'medium' | 'high';
 }
 
+export type ScaleUnit = 'pohon' | 'batang' | 'polybag' | 'pot' | 'lubang_tanam' | 'rumpun' | 'bedeng' | 'm2' | 'hektar' | 'ru';
+
 export interface Planting {
   id: string;
   user_id?: string;
   crop_id: string;
   crop_name: string;
   variety: string;
-  plot_name: string; // Misal: "Sawah Blok Timur", "Kebun Belakang"
-  area_sqm: number; // Luas Lahan dalam m2
+  plot_name: string; // Misal: "Sawah Blok Timur", "Kebun Belakang", "50 Pohon Cabai"
+  area_sqm: number; // Luas Lahan (m2) / Estimasi ekuivalen luas
+  scale_quantity?: number; // Jumlah kuantitas riil (misal: 50 pohon, 100 polybag, 2 Ha)
+  scale_unit?: ScaleUnit; // Satuan kuantitas
   planting_date: string; // YYYY-MM-DD
   estimated_harvest_date: string; // YYYY-MM-DD
   status: 'active' | 'harvested' | 'failed';

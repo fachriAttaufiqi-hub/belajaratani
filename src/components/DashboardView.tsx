@@ -22,6 +22,7 @@ import {
 import { Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
+import { formatPlantingScale, summarizePlantingsScale } from '../lib/scaleUnits';
 import confetti from 'canvas-confetti';
 
 interface DashboardViewProps {
@@ -65,6 +66,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Stats calculation
   const totalAreaSqm = plantings.reduce((acc, p) => acc + (Number(p.area_sqm) || 0), 0);
   const totalAreaHa = (totalAreaSqm / 10000).toFixed(2);
+  const scaleSummary = summarizePlantingsScale(plantings);
 
   // Today's tasks (due today or overdue and not completed)
   const todayTasks = activeTasks.filter(t => t.due_date <= todayStr && !t.is_completed);
@@ -142,8 +144,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-2xl sm:text-3xl font-black text-stone-900">
             {plantings.length} <span className="text-sm font-semibold text-stone-500">Plot</span>
           </div>
-          <p className="text-xs text-stone-500 mt-1 flex items-center gap-1">
-            Total area: <strong className="text-stone-700">{totalAreaHa} Ha</strong> ({totalAreaSqm.toLocaleString('id-ID')} m²)
+          <p className="text-xs text-stone-500 mt-1 flex items-center gap-1 flex-wrap">
+            <span>Skala:</span> <strong className="text-stone-700">{scaleSummary.summaryText}</strong>
           </p>
         </div>
 
@@ -292,11 +294,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               {planting.crop_name}
                             </span>
                           </div>
-                          <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-2">
-                            <span>Varietas: <strong>{planting.variety}</strong></span>
-                            <span>•</span>
-                            <span>Luas: <strong>{planting.area_sqm} m²</strong></span>
-                          </p>
+                          {(() => {
+                            const scale = formatPlantingScale(planting);
+                            return (
+                              <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                                <span>Varietas: <strong>{planting.variety}</strong></span>
+                                <span>•</span>
+                                <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                  <span>{scale.icon}</span>
+                                  <span>{scale.primary}</span>
+                                  {scale.secondary && <span className="text-stone-400 font-medium text-[11px]">({scale.secondary})</span>}
+                                </span>
+                              </p>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -536,8 +547,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-semibold text-stone-800">{plantingToDelete.crop_name} ({plantingToDelete.variety})</span>
               </div>
               <div className="flex justify-between text-stone-600">
-                <span>Luas Lahan:</span>
-                <span className="font-semibold text-stone-800">{plantingToDelete.area_sqm} m²</span>
+                <span>Skala / Luas:</span>
+                <span className="font-semibold text-stone-800">
+                  {formatPlantingScale(plantingToDelete).primary} {formatPlantingScale(plantingToDelete).secondary && `(${formatPlantingScale(plantingToDelete).secondary})`}
+                </span>
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>Tanggal Tanam:</span>

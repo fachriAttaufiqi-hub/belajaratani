@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Planting, TaskCategory, TaskItem } from '../types';
 import { formatDate, generateUUID } from '../lib/storage';
+import { formatPlantingScale } from '../lib/scaleUnits';
 import confetti from 'canvas-confetti';
 
 interface ScheduleViewProps {
@@ -166,9 +167,16 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900">
                   {currentPlot.crop_name} ({currentPlot.variety})
                 </span>
-                <span className="text-xs text-stone-500 font-medium">
-                  {currentPlot.area_sqm} m²
-                </span>
+                {(() => {
+                  const scale = formatPlantingScale(currentPlot);
+                  return (
+                    <span className="text-xs font-bold text-emerald-950 bg-white border border-emerald-300 px-2.5 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                      <span>{scale.icon}</span>
+                      <span>{scale.primary}</span>
+                      {scale.secondary && <span className="text-stone-400 font-normal text-[11px]">({scale.secondary})</span>}
+                    </span>
+                  );
+                })()}
               </div>
               <p className="text-xs text-stone-600 mt-1">
                 Tanggal Tanam: <strong>{currentPlot.planting_date}</strong> • Estimasi Panen: <strong>{currentPlot.estimated_harvest_date}</strong>
@@ -440,12 +448,21 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       )}
 
                       {/* Plot info */}
-                      {planting && (
-                        <span className="text-xs font-medium text-stone-500 ml-auto flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-stone-400" />
-                          {planting.plot_name} ({planting.crop_name})
-                        </span>
-                      )}
+                      {planting && (() => {
+                        const scale = formatPlantingScale(planting);
+                        return (
+                          <div className="text-xs font-medium text-stone-500 ml-auto flex items-center gap-1.5 flex-wrap">
+                            <span className="flex items-center gap-1 text-stone-600">
+                              <MapPin className="w-3 h-3 text-stone-400" />
+                              {planting.plot_name}
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                              <span>{scale.icon}</span>
+                              <span>{scale.primary}</span>
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Title */}
@@ -692,8 +709,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <span className="font-semibold text-stone-800">{plotToDelete.crop_name} ({plotToDelete.variety})</span>
               </div>
               <div className="flex justify-between text-stone-600">
-                <span>Luas Lahan:</span>
-                <span className="font-semibold text-stone-800">{plotToDelete.area_sqm} m²</span>
+                <span>Skala / Luas:</span>
+                <span className="font-semibold text-stone-800">
+                  {formatPlantingScale(plotToDelete).primary} {formatPlantingScale(plotToDelete).secondary && `(${formatPlantingScale(plotToDelete).secondary})`}
+                </span>
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>Tanggal Tanam:</span>

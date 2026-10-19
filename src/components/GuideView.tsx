@@ -151,7 +151,7 @@ export const GuideView: React.FC<GuideViewProps> = ({
               <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200/80 space-y-2">
                 <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
                   <Droplets className="w-3.5 h-3.5 text-emerald-700" />
-                  Rekomendasi Pemupukan per Ha
+                  Rekomendasi Pemupukan Lahan & Pohon
                 </span>
                 <p className="text-xs text-emerald-950 font-medium leading-relaxed">
                   {selectedCrop.fertilizerGuide.chemicalPerHa}
@@ -159,6 +159,10 @@ export const GuideView: React.FC<GuideViewProps> = ({
                 <p className="text-[11px] text-emerald-800 font-semibold italic">
                   Organik: {selectedCrop.fertilizerGuide.organicPerHa}
                 </p>
+                <div className="pt-1.5 border-t border-emerald-200/60 text-[11px] text-emerald-950 flex items-start gap-1.5">
+                  <span className="text-xs">🌳</span>
+                  <span><strong>Skala Pohon / Pekarangan:</strong> Gunakan kalkulator pupuk di atas untuk menghitung takaran gram per pohon/batang tanpa repot konversi hektar.</span>
+                </div>
               </div>
             </div>
 

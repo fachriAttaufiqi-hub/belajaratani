@@ -19,6 +19,7 @@ import {
 import { Planting, TaskItem, ActivityLog, ExpenseRecord } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
+import { formatPlantingScale, summarizePlantingsScale } from '../lib/scaleUnits';
 
 interface ManagePlotsModalProps {
   isOpen: boolean;
@@ -52,8 +53,9 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const totalAreaSqm = plantings.reduce((sum, p) => sum + (Number(p.area_sqm) || 0), 0);
-  const totalAreaHa = (totalAreaSqm / 10000).toFixed(2);
+  const scaleSummary = summarizePlantingsScale(plantings);
+  const totalAreaSqm = scaleSummary.totalSqm;
+  const totalAreaHa = scaleSummary.totalHa;
 
   const handleDeleteConfirm = async () => {
     if (!plotToDelete) return;
@@ -123,9 +125,9 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
             </span>
           </div>
           <div>
-            <span className="text-stone-500 font-medium block">Total Luas</span>
-            <span className="text-stone-900 font-extrabold text-sm sm:text-base">
-              {totalAreaHa} Ha <span className="text-xs font-medium text-stone-500">({totalAreaSqm.toLocaleString('id-ID')} m²)</span>
+            <span className="text-stone-500 font-medium block">Total Skala Budidaya</span>
+            <span className="text-stone-900 font-extrabold text-xs sm:text-sm line-clamp-1" title={scaleSummary.summaryText}>
+              {scaleSummary.summaryText}
             </span>
           </div>
           <div>
@@ -214,9 +216,16 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
                               {planting.crop_name} ({planting.variety})
                             </span>
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-stone-200 text-stone-700">
-                              {planting.area_sqm.toLocaleString('id-ID')} m² ({(Number(planting.area_sqm) / 10000).toFixed(2)} Ha)
-                            </span>
+                            {(() => {
+                              const scale = formatPlantingScale(planting);
+                              return (
+                                <span className="inline-flex items-center gap-1 font-bold text-xs px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-300">
+                                  <span>{scale.icon}</span>
+                                  <span>{scale.primary}</span>
+                                  {scale.secondary && <span className="text-stone-500 font-medium text-[11px]">({scale.secondary})</span>}
+                                </span>
+                              );
+                            })()}
                           </div>
                           
                           <div className="flex items-center gap-3 text-xs text-stone-500 mt-1.5 flex-wrap">
@@ -367,9 +376,9 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
                 </span>
               </div>
               <div className="flex justify-between text-stone-600">
-                <span>Luas Lahan:</span>
+                <span>Skala / Luas Lahan:</span>
                 <span className="font-semibold text-stone-800">
-                  {plotToDelete.area_sqm.toLocaleString('id-ID')} m²
+                  {formatPlantingScale(plotToDelete).primary} {formatPlantingScale(plotToDelete).secondary ? `(${formatPlantingScale(plotToDelete).secondary})` : ''}
                 </span>
               </div>
               <div className="flex justify-between text-stone-600">

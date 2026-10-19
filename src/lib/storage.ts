@@ -192,20 +192,28 @@ export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: 
       return false;
     }
 
-    const plantingPayload = {
+    const plantingPayload: any = {
       id: currentP.id,
       crop_id: currentP.crop_id || 'jagung',
       crop_name: currentP.crop_name || 'Tanaman',
       variety: currentP.variety || 'Lokal',
       plot_name: currentP.plot_name || 'Lahan',
       area_sqm: Number(currentP.area_sqm) || 1000,
+      scale_quantity: currentP.scale_quantity !== undefined ? currentP.scale_quantity : (Number(currentP.area_sqm) || 1000),
+      scale_unit: currentP.scale_unit || 'm2',
       planting_date: currentP.planting_date || formatDate(new Date()),
       estimated_harvest_date: currentP.estimated_harvest_date || addDays(formatDate(new Date()), 90),
       status: currentP.status || 'active',
       notes: currentP.notes || ''
     };
 
-    const { error: upsertErr } = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
+    let { error: upsertErr } = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
+    if (upsertErr && upsertErr.message && upsertErr.message.toLowerCase().includes('column')) {
+      delete plantingPayload.scale_quantity;
+      delete plantingPayload.scale_unit;
+      const retry = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
+      upsertErr = retry.error;
+    }
     if (upsertErr) {
       console.warn('Gagal upsert planting di Supabase:', upsertErr.message);
       return false;
@@ -278,6 +286,8 @@ export function generateDefaultMasterDataset() {
     variety: 'NK 212',
     plot_name: 'Lahan Barat (Petak A)',
     area_sqm: 2500,
+    scale_quantity: 2500,
+    scale_unit: 'm2',
     planting_date: jagungPlantStr,
     estimated_harvest_date: jagungHarvestStr,
     status: 'active',
@@ -285,7 +295,7 @@ export function generateDefaultMasterDataset() {
     created_at: new Date().toISOString()
   };
 
-  // Plot 2: Cabai Rawit (HST 28)
+  // Plot 2: Cabai Rawit (HST 28 - Skala 500 Pohon)
   const cabaiPlantDate = new Date(today);
   cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
   const cabaiPlantStr = formatDate(cabaiPlantDate);
@@ -297,16 +307,18 @@ export function generateDefaultMasterDataset() {
     crop_id: 'cabai',
     crop_name: 'Cabai Rawit / Merah',
     variety: 'Ori 212',
-    plot_name: 'Kebun Mulsa Blok B',
+    plot_name: 'Kebun Mulsa Blok B (500 Pohon)',
     area_sqm: 1200,
+    scale_quantity: 500,
+    scale_unit: 'pohon',
     planting_date: cabaiPlantStr,
     estimated_harvest_date: cabaiHarvestStr,
     status: 'active',
-    notes: 'Bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
+    notes: '500 pohon bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
     created_at: new Date().toISOString()
   };
 
-  // Plot 3: Padi Sawah (HST 45)
+  // Plot 3: Padi Sawah (HST 45 - 0.5 Ha)
   const padiPlantDate = new Date(today);
   padiPlantDate.setDate(padiPlantDate.getDate() - 45);
   const padiPlantStr = formatDate(padiPlantDate);
@@ -318,8 +330,10 @@ export function generateDefaultMasterDataset() {
     crop_id: 'padi',
     crop_name: 'Padi Sawah',
     variety: 'Inpari 32',
-    plot_name: 'Sawah Irigasi Desa C',
+    plot_name: 'Sawah Irigasi Desa C (0.5 Ha)',
     area_sqm: 5000,
+    scale_quantity: 0.5,
+    scale_unit: 'hektar',
     planting_date: padiPlantStr,
     estimated_harvest_date: padiHarvestStr,
     status: 'active',
@@ -474,20 +488,28 @@ export const FarmDB = {
         await ensureCropsInSupabase(supabase);
 
         // Bersihkan objek untuk kompatibilitas skema Supabase
-        const plantingPayload = {
+        const plantingPayload: any = {
           id: planting.id,
           crop_id: planting.crop_id,
           crop_name: planting.crop_name,
           variety: planting.variety,
           plot_name: planting.plot_name,
           area_sqm: planting.area_sqm,
+          scale_quantity: planting.scale_quantity ?? planting.area_sqm,
+          scale_unit: planting.scale_unit || 'm2',
           planting_date: planting.planting_date,
           estimated_harvest_date: planting.estimated_harvest_date,
           status: planting.status || 'active',
           notes: planting.notes || ''
         };
 
-        const { error: pErr } = await supabase.from('plantings').insert([plantingPayload]);
+        let { error: pErr } = await supabase.from('plantings').insert([plantingPayload]);
+        if (pErr && pErr.message && pErr.message.toLowerCase().includes('column')) {
+          delete plantingPayload.scale_quantity;
+          delete plantingPayload.scale_unit;
+          const retry = await supabase.from('plantings').insert([plantingPayload]);
+          pErr = retry.error;
+        }
         if (pErr) {
           console.error('Gagal simpan planting ke Supabase:', pErr);
           errMsg = pErr.message;
@@ -1113,12 +1135,24 @@ export const FarmDB = {
           variety: p.variety,
           plot_name: p.plot_name,
           area_sqm: p.area_sqm,
+          scale_quantity: p.scale_quantity ?? p.area_sqm,
+          scale_unit: p.scale_unit || 'm2',
           planting_date: p.planting_date,
           estimated_harvest_date: p.estimated_harvest_date,
           status: p.status || 'active',
           notes: p.notes || ''
         }));
-        const { error: pErr } = await supabase.from('plantings').upsert(pPayloads, { onConflict: 'id' });
+        let { error: pErr } = await supabase.from('plantings').upsert(pPayloads, { onConflict: 'id' });
+        if (pErr && pErr.message && pErr.message.toLowerCase().includes('column')) {
+          const stripped = pPayloads.map((item: any) => {
+            const copy = { ...item };
+            delete copy.scale_quantity;
+            delete copy.scale_unit;
+            return copy;
+          });
+          const retry = await supabase.from('plantings').upsert(stripped, { onConflict: 'id' });
+          pErr = retry.error;
+        }
         if (pErr) throw new Error(`Gagal sync plantings: ${pErr.message}`);
       }
 

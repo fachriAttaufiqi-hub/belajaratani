@@ -46,7 +46,7 @@ ON CONFLICT (id) DO UPDATE SET
     variety_examples = EXCLUDED.variety_examples,
     description = EXCLUDED.description;
 
--- 3. TABEL: plantings (Lahan / Plot Budidaya Aktif)
+-- 3. TABEL: plantings (Lahan / Plot Budidaya Aktif - Mendukung Satuan Pohon, Polybag, m2, Ha)
 CREATE TABLE IF NOT EXISTS public.plantings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID,
@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS public.plantings (
     crop_name VARCHAR(100) NOT NULL,
     variety VARCHAR(100) NOT NULL,
     plot_name VARCHAR(120) NOT NULL,
-    area_sqm NUMERIC(10, 2) NOT NULL DEFAULT 1000, -- Luas Lahan (m2)
+    area_sqm NUMERIC(10, 2) NOT NULL DEFAULT 1000, -- Luas Lahan (m2) / Estimasi luas ekuivalen
+    scale_quantity NUMERIC(10, 2) DEFAULT 1000, -- Kuantitas riil (misal 50 pohon, 100 polybag)
+    scale_unit VARCHAR(30) DEFAULT 'm2', -- pohon, polybag, m2, hektar, bedeng, rumpun, ru
     planting_date DATE NOT NULL,
     estimated_harvest_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'active', -- active, harvested, failed
@@ -62,6 +64,10 @@ CREATE TABLE IF NOT EXISTS public.plantings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Migrasi otomatis jika tabel plantings sudah dibuat sebelumnya
+ALTER TABLE public.plantings ADD COLUMN IF NOT EXISTS scale_quantity NUMERIC(10, 2) DEFAULT 1000;
+ALTER TABLE public.plantings ADD COLUMN IF NOT EXISTS scale_unit VARCHAR(30) DEFAULT 'm2';
 
 -- 4. TABEL: tasks (Jadwal & Checklist Kegiatan Bertani berbasis HST)
 CREATE TABLE IF NOT EXISTS public.tasks (

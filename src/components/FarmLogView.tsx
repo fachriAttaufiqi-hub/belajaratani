@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { ActivityLog, ExpenseRecord, Planting } from '../types';
 import { formatDate, generateUUID } from '../lib/storage';
+import { formatPlantingScale } from '../lib/scaleUnits';
 
 interface FarmLogViewProps {
   plantings: Planting[];
@@ -98,14 +99,38 @@ export const FarmLogView: React.FC<FarmLogViewProps> = ({
   // Total expenses calculation
   const totalExpenseAmount = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   
+  // Active plot object & scale
+  const activePlot = useMemo(() => {
+    return plantings.find(p => p.id === selectedPlotId);
+  }, [plantings, selectedPlotId]);
+
+  const activeScaleQty = useMemo(() => {
+    if (!activePlot) return 0;
+    return Number(activePlot.scale_quantity) || Number(activePlot.area_sqm) || 1;
+  }, [activePlot]);
+
+  const isSmallScalePlant = activePlot && (
+    activePlot.scale_unit === 'pohon' || 
+    activePlot.scale_unit === 'batang' || 
+    activePlot.scale_unit === 'polybag' || 
+    activePlot.scale_unit === 'pot' ||
+    activePlot.scale_unit === 'lubang_tanam'
+  );
+
   // Active plot area
   const activeArea = useMemo(() => {
     if (selectedPlotId === 'all') {
       return plantings.reduce((acc, p) => acc + (Number(p.area_sqm) || 0), 0);
     }
-    const found = plantings.find(p => p.id === selectedPlotId);
-    return found ? Number(found.area_sqm) : 1000;
-  }, [plantings, selectedPlotId]);
+    return activePlot ? Number(activePlot.area_sqm) : 1000;
+  }, [plantings, selectedPlotId, activePlot]);
+
+  const costPerUnit = useMemo(() => {
+    if (isSmallScalePlant && activeScaleQty > 0) {
+      return Math.round(totalExpenseAmount / activeScaleQty);
+    }
+    return activeArea > 0 ? Math.round(totalExpenseAmount / activeArea) : 0;
+  }, [isSmallScalePlant, activeScaleQty, activeArea, totalExpenseAmount]);
 
   const costPerSqm = activeArea > 0 ? Math.round(totalExpenseAmount / activeArea) : 0;
 
@@ -434,12 +459,23 @@ export const FarmLogView: React.FC<FarmLogViewProps> = ({
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs">
-              <span className="text-xs font-bold text-stone-500 uppercase">Biaya Modal per m²</span>
+              <span className="text-xs font-bold text-stone-500 uppercase">
+                {isSmallScalePlant
+                  ? `Biaya Modal per ${activePlot?.scale_unit === 'polybag' ? 'Polybag' : activePlot?.scale_unit === 'pot' ? 'Pot' : activePlot?.scale_unit === 'lubang_tanam' ? 'Lubang' : 'Pohon'}`
+                  : 'Biaya Modal per m²'}
+              </span>
               <div className="text-2xl sm:text-3xl font-black text-emerald-700 mt-1">
-                Rp {costPerSqm.toLocaleString('id-ID')} <span className="text-xs font-semibold text-stone-500">/ m²</span>
+                Rp {costPerUnit.toLocaleString('id-ID')}{' '}
+                <span className="text-xs font-semibold text-stone-500">
+                  / {isSmallScalePlant ? (activePlot?.scale_unit === 'polybag' ? 'polybag' : activePlot?.scale_unit === 'pot' ? 'pot' : activePlot?.scale_unit === 'lubang_tanam' ? 'lubang' : 'pohon') : 'm²'}
+                </span>
               </div>
               <p className="text-xs text-stone-500 mt-1">
-                Luas lahan yang dievaluasi: {activeArea.toLocaleString('id-ID')} m²
+                {activePlot ? (
+                  <span>Kuantitas: <strong>{formatPlantingScale(activePlot).primary}</strong> (~{activePlot.area_sqm.toLocaleString('id-ID')} m²)</span>
+                ) : (
+                  <span>Luas total lahan: {activeArea.toLocaleString('id-ID')} m²</span>
+                )}
               </p>
             </div>
 

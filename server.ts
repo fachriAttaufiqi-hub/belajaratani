@@ -104,6 +104,8 @@ function getMasterSeedData() {
     variety: 'NK 212',
     plot_name: 'Lahan Barat (Petak A)',
     area_sqm: 2500,
+    scale_quantity: 2500,
+    scale_unit: 'm2',
     planting_date: jagungPlantStr,
     estimated_harvest_date: jagungHarvestStr,
     status: 'active',
@@ -111,7 +113,7 @@ function getMasterSeedData() {
     created_at: new Date().toISOString()
   };
 
-  // Plot 2: Cabai Rawit (HST 28)
+  // Plot 2: Cabai Rawit (HST 28 - Skala 500 Pohon)
   const cabaiPlantDate = new Date(today);
   cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
   const cabaiPlantStr = formatDate(cabaiPlantDate);
@@ -123,16 +125,18 @@ function getMasterSeedData() {
     crop_id: 'cabai',
     crop_name: 'Cabai Rawit / Merah',
     variety: 'Ori 212',
-    plot_name: 'Kebun Mulsa Blok B',
+    plot_name: 'Kebun Mulsa Blok B (500 Pohon)',
     area_sqm: 1200,
+    scale_quantity: 500,
+    scale_unit: 'pohon',
     planting_date: cabaiPlantStr,
     estimated_harvest_date: cabaiHarvestStr,
     status: 'active',
-    notes: 'Bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
+    notes: '500 pohon bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
     created_at: new Date().toISOString()
   };
 
-  // Plot 3: Padi Sawah (HST 45)
+  // Plot 3: Padi Sawah (HST 45 - 0.5 Hektar)
   const padiPlantDate = new Date(today);
   padiPlantDate.setDate(padiPlantDate.getDate() - 45);
   const padiPlantStr = formatDate(padiPlantDate);
@@ -144,8 +148,10 @@ function getMasterSeedData() {
     crop_id: 'padi',
     crop_name: 'Padi Sawah',
     variety: 'Inpari 32',
-    plot_name: 'Sawah Irigasi Desa C',
+    plot_name: 'Sawah Irigasi Desa C (0.5 Ha)',
     area_sqm: 5000,
+    scale_quantity: 0.5,
+    scale_unit: 'hektar',
     planting_date: padiPlantStr,
     estimated_harvest_date: padiHarvestStr,
     status: 'active',
