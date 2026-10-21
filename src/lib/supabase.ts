@@ -1,21 +1,22 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { DEFAULT_CROPS } from '../data/defaultCrops';
 import { idbGet, idbSet, idbRemove } from './indexedDb';
 
 const STORAGE_KEY_URL = 'taniguide_supabase_url';
 const STORAGE_KEY_KEY = 'taniguide_supabase_key';
 
-// Kredensial default (bisa diisi langsung atau diambil dari env / server backend):
-export const DEFAULT_SUPABASE_URL = '';
-export const DEFAULT_SUPABASE_ANON_KEY = '';
+// ============================================================================
+// MASUKKAN KREDENSIAL SUPABASE ANDA DI SINI
+// Kunci ini akan terkunci secara permanen di seluruh gawai/browser.
+// ============================================================================
+export const DEFAULT_SUPABASE_URL = 'https://proyek-anda.supabase.co'; // <--- Masukkan URL Supabase Anda
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // <--- Masukkan Anon Key Anda
 
 let inMemoryUrl = '';
 let inMemoryKey = '';
 let isServerLocked = false;
 
-// Ambil konfigurasi Supabase yang terkunci di Server Backend (sehingga semua gawai langsung terhubung)
+// Ambil konfigurasi Supabase yang terkunci
 export async function syncSupabaseConfigFromAllSources(): Promise<{ isConfigured: boolean; url: string; isLocked: boolean }> {
-  // 1. Coba ambil dari Server Backend (Terkunci di server untuk seluruh gawai)
   try {
     const res = await fetch('/api/config/supabase', { cache: 'no-store' });
     if (res.ok) {
@@ -35,18 +36,14 @@ export async function syncSupabaseConfigFromAllSources(): Promise<{ isConfigured
       }
     }
   } catch (err) {
-    // Di lingkungan static (misal offline/GitHub Pages tanpa backend), lanjutkan ke step 2
+    // Lingkungan static / offline
   }
 
-  // 2. Coba pulihkan dari IndexedDB
   await restoreSupabaseConfigFromIdb();
-
-  // 3. Coba dari URL sync payload
   checkAndApplyUrlSync();
 
   const current = getSavedSupabaseConfig();
 
-  // 4. Jika di gawai ini sudah ada kredensial tapi server belum menguncinya, otomatis kunci ke server backend sekarang!
   if (current.isConfigured && current.url && current.key && !isServerLocked) {
     try {
       await fetch('/api/config/supabase', {
@@ -55,15 +52,12 @@ export async function syncSupabaseConfigFromAllSources(): Promise<{ isConfigured
         body: JSON.stringify({ url: current.url, key: current.key })
       });
       isServerLocked = true;
-    } catch (e) {
-      // Abaikan jika offline / static hosting
-    }
+    } catch (e) {}
   }
 
   return { isConfigured: current.isConfigured, url: current.url, isLocked: isServerLocked || current.isConfigured };
 }
 
-// Inisialisasi konfigurasi dari IndexedDB jika localStorage sempat terhapus oleh Chrome
 export async function restoreSupabaseConfigFromIdb(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
@@ -125,7 +119,6 @@ export async function saveSupabaseConfig(url: string, key: string, lockToServer 
     idbSet(STORAGE_KEY_KEY, cleanKey).catch(() => {});
     isServerLocked = true;
 
-    // Kunci ke Server Backend agar langsung aktif di perangkat lain
     if (lockToServer) {
       try {
         await fetch('/api/config/supabase', {
@@ -149,7 +142,6 @@ export async function saveSupabaseConfig(url: string, key: string, lockToServer 
   return true;
 }
 
-// Periksa apakah ada parameter sinkronisasi di URL (misal dibuka dari tautan gawai lain)
 export function checkAndApplyUrlSync(): { applied: boolean; message?: string } {
   if (typeof window === 'undefined') return { applied: false };
   try {
@@ -174,7 +166,7 @@ export function checkAndApplyUrlSync(): { applied: boolean; message?: string } {
         window.history.replaceState(null, '', cleanUrl);
         return { 
           applied: true, 
-          message: 'Koneksi Cloud Supabase otomatis dikunci ke gawai ini! Data master realtime aktif.' 
+          message: 'Koneksi Cloud Supabase otomatis dikunci ke gawai ini!' 
         };
       }
     }
@@ -184,7 +176,6 @@ export function checkAndApplyUrlSync(): { applied: boolean; message?: string } {
   return { applied: false };
 }
 
-// Buat tautan berbagi konfigurasi Supabase untuk gawai lain
 export function generateSyncShareUrl(): string {
   const { url, key, isConfigured } = getSavedSupabaseConfig();
   if (!isConfigured) return '';
@@ -268,7 +259,6 @@ export function subscribeToSupabaseRealtime(
   try {
     const channel = client.channel('taniguide-master-realtime');
 
-    // Dengarkan perubahan pada 4 tabel utama secara realtime
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plantings' }, (payload: any) => {
         onDataChanged('plantings', payload.eventType, payload.new, payload.old);
@@ -282,7 +272,6 @@ export function subscribeToSupabaseRealtime(
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, (payload: any) => {
         onDataChanged('expenses', payload.eventType, payload.new, payload.old);
       })
-      // Broadcast channel untuk sinkronisasi seketika antar-browser/gawai
       .on('broadcast', { event: 'data_changed' }, ({ payload }: any) => {
         if (payload && payload.table) {
           onDataChanged(payload.table, payload.eventType || 'UPDATE', payload.data);
@@ -311,14 +300,12 @@ export function subscribeToSupabaseRealtime(
 }
 
 export function broadcastRealtimeChange(table: string, eventType: 'INSERT' | 'UPDATE' | 'DELETE', data: any) {
-  // 1. Broadcast ke tab lokal
   if (localBroadcastChannel) {
     try {
       localBroadcastChannel.postMessage({ table, eventType, data });
     } catch {}
   }
 
-  // 2. Broadcast ke server Supabase Cloud untuk seluruh gawai lain
   if (activeRealtimeChannel) {
     try {
       activeRealtimeChannel.send({
@@ -336,32 +323,21 @@ export async function testSupabaseConnection(url: string, key: string): Promise<
   try {
     const testClient = createClient(url, key);
     const { error } = await testClient.from('crops').select('id').limit(1);
+    
     if (error) {
       if (error.code === '42P01') {
         return {
           success: true,
-          message: 'Terhubung ke Supabase! Namun tabel belum dibuat. Silakan salin & jalankan Skrip DDL SQL di tab SQL Editor Supabase.'
+          message: 'Terhubung ke Supabase! Namun tabel belum dibuat. Silakan jalankan DDL SQL.'
         };
       }
       return { success: false, message: `Error Supabase (${error.code}): ${error.message}` };
     }
-    // Auto-seed katalog komoditas ke Supabase agar foreign key tidak pernah error
-    try {
-      const cropsPayload = DEFAULT_CROPS.map(c => ({
-        id: c.id,
-        name: c.name,
-        latin_name: c.latinName,
-        category: c.category,
-        variety_examples: c.varietyExamples,
-        harvest_days_min: c.harvestDaysMin,
-        harvest_days_max: c.harvestDaysMax,
-        icon: c.icon,
-        description: c.description
-      }));
-      await testClient.from('crops').upsert(cropsPayload, { onConflict: 'id' });
-    } catch {}
 
-    return { success: true, message: 'Koneksi ke Supabase Berhasil! Master database siap digunakan secara realtime.' };
+    // CATATAN: Bagian auto-seed `upsert(cropsPayload)` sengaja DIBUANG 
+    // agar data template bawaan tidak secara otomatis terisi ulang ketika Anda menghapusnya.
+
+    return { success: true, message: 'Koneksi ke Supabase Berhasil!' };
   } catch (err: any) {
     return { success: false, message: err?.message || 'Gagal terhubung ke host Supabase' };
   }
