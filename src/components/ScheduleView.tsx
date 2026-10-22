@@ -16,7 +16,8 @@ import {
   Layers,
   ChevronRight,
   Droplets,
-  X
+  X,
+  Bot
 } from 'lucide-react';
 import { Planting, TaskCategory, TaskItem } from '../types';
 import { formatDate, generateUUID } from '../lib/storage';
@@ -34,6 +35,7 @@ interface ScheduleViewProps {
   onOpenNewPlanting: () => void;
   onDeletePlanting?: (plotId: string) => void;
   onOpenManagePlots?: () => void;
+  onNavigateToAssistant?: () => void;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -46,7 +48,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onDeleteTask,
   onOpenNewPlanting,
   onDeletePlanting,
-  onOpenManagePlots
+  onOpenManagePlots,
+  onNavigateToAssistant
 }) => {
   const todayStr = formatDate(new Date());
   const currentPlot = plantings.find(p => p.id === selectedPlotId);
@@ -185,6 +188,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           </div>
           
           <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            {onNavigateToAssistant && (
+              <button
+                type="button"
+                onClick={onNavigateToAssistant}
+                className="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title={`Konsultasi perawatan AI untuk ${currentPlot.plot_name}`}
+              >
+                <Bot className="w-4 h-4 text-teal-600" />
+                <span>Konsultasi AI Lahan Ini</span>
+              </button>
+            )}
             {onDeletePlanting && (
               <button
                 type="button"
@@ -223,6 +237,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {onNavigateToAssistant && (
+            <button
+              type="button"
+              onClick={onNavigateToAssistant}
+              className="px-3.5 py-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs sm:text-sm transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Konsultasi Jadwal & Perawatan Tanaman dengan AI"
+            >
+              <Bot className="w-4 h-4 text-teal-600" />
+              <span>Tanya Asisten AI</span>
+            </button>
+          )}
           {onOpenManagePlots && (
             <button
               onClick={onOpenManagePlots}

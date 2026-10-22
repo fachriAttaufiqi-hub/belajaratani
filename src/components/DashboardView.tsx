@@ -17,7 +17,8 @@ import {
   RotateCcw,
   Trash2,
   X,
-  Layers
+  Layers,
+  Bot
 } from 'lucide-react';
 import { Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
@@ -32,6 +33,7 @@ interface DashboardViewProps {
   onSelectPlot: (plotId: string) => void;
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onNavigateToSchedule: () => void;
+  onNavigateToAssistant?: () => void;
   onOpenNewPlanting: () => void;
   onDeletePlanting: (plotId: string) => void;
   onOpenManagePlots?: () => void;
@@ -45,6 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectPlot,
   onToggleTask,
   onNavigateToSchedule,
+  onNavigateToAssistant,
   onOpenNewPlanting,
   onDeletePlanting,
   onOpenManagePlots,
@@ -120,6 +123,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {onNavigateToAssistant && (
+              <button
+                type="button"
+                onClick={onNavigateToAssistant}
+                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm border border-white/20 shadow-md backdrop-blur-xs transition active:scale-95 flex items-center gap-2 cursor-pointer"
+              >
+                <Bot className="w-4 h-4 text-emerald-300" />
+                <span>Konsultasi AI</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenNewPlanting}
               className="px-5 py-3 rounded-2xl bg-white text-emerald-800 font-bold text-sm shadow-lg hover:bg-emerald-50 transition active:scale-95 flex items-center gap-2 cursor-pointer"
@@ -361,13 +375,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                           <span>Hapus Lahan</span>
                         </button>
+
+                        {onNavigateToAssistant && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectPlot(planting.id);
+                              onNavigateToAssistant();
+                            }}
+                            className="font-bold text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100 border border-teal-200/90 px-3 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 cursor-pointer text-xs"
+                            title={`Tanya panduan perawatan AI untuk plot "${planting.plot_name}"`}
+                          >
+                            <Bot className="w-3.5 h-3.5 text-teal-600" />
+                            <span>Tanya AI</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
                             onSelectPlot(planting.id);
                             onNavigateToSchedule();
                           }}
-                          className="font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 cursor-pointer"
+                          className="font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 cursor-pointer text-xs"
                         >
                           Detail Jadwal <ChevronRight className="w-3.5 h-3.5" />
                         </button>
@@ -376,6 +406,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* AI Care & Schedule Assistant Banner */}
+          {onNavigateToAssistant && (
+            <div className="bg-linear-to-r from-emerald-950 via-teal-950 to-stone-900 rounded-3xl p-5 sm:p-6 text-white border border-emerald-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                  🤖
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-base sm:text-lg">
+                      Butuh Panduan Jadwal & Langkah Perawatan Khusus?
+                    </h3>
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-400 text-stone-950">
+                      Asisten AI
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-300 mt-1 max-w-xl leading-relaxed">
+                    Konsultasikan takaran pupuk kocor per pohon, cara membasmi hama & penyakit, atau minta AI membuatkan jadwal SOP perawatan otomatis untuk lahan Anda.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onNavigateToAssistant}
+                className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              >
+                <Sparkles className="w-4 h-4 text-stone-950" />
+                <span>Konsultasi AI Sekarang</span>
+              </button>
             </div>
           )}
 

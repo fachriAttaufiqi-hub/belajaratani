@@ -8,10 +8,11 @@ import { NewPlantingModal } from './components/NewPlantingModal';
 import { FertilizerCalcModal } from './components/FertilizerCalcModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { ManagePlotsModal } from './components/ManagePlotsModal';
+import { AIAssistantView } from './components/AIAssistantView';
 import { FarmDB } from './lib/storage';
 import { getSavedSupabaseConfig, checkAndApplyUrlSync, syncSupabaseConfigFromAllSources, subscribeToSupabaseRealtime } from './lib/supabase';
 import { ActivityLog, ExpenseRecord, Planting, TaskItem } from './types';
-import { Smartphone, ShieldCheck, Download, RotateCcw, Key, Sparkles, Radio } from 'lucide-react';
+import { Smartphone, ShieldCheck, Download, RotateCcw, Key, Sparkles, Radio, Bot } from 'lucide-react';
 
 export default function App() {
   const [plantings, setPlantings] = useState<Planting[]>([]);
@@ -19,7 +20,7 @@ export default function App() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [selectedPlotId, setSelectedPlotId] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'logs' | 'guide'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant'>('dashboard');
 
   // Modals
   const [isNewPlantingOpen, setIsNewPlantingOpen] = useState<boolean>(false);
@@ -339,6 +340,7 @@ export default function App() {
             onSelectPlot={setSelectedPlotId}
             onToggleTask={handleToggleTask}
             onNavigateToSchedule={() => setActiveTab('schedule')}
+            onNavigateToAssistant={() => setActiveTab('assistant')}
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
             onDeletePlanting={handleDeletePlanting}
             onOpenManagePlots={() => setIsManagePlotsOpen(true)}
@@ -358,6 +360,7 @@ export default function App() {
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
             onDeletePlanting={handleDeletePlanting}
             onOpenManagePlots={() => setIsManagePlotsOpen(true)}
+            onNavigateToAssistant={() => setActiveTab('assistant')}
           />
         )}
 
@@ -381,7 +384,39 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'assistant' && (
+          <AIAssistantView
+            plantings={plantings}
+            tasks={tasks}
+            selectedPlotId={selectedPlotId}
+            onSelectPlot={setSelectedPlotId}
+            onAddTask={handleAddTask}
+            onNavigateToSchedule={() => setActiveTab('schedule')}
+          />
+        )}
+
       </main>
+
+      {/* Floating AI Assistant Quick Trigger */}
+      {activeTab !== 'assistant' && (
+        <aside aria-label="Bantuan Asisten AI Tani" className="fixed bottom-5 right-5 z-30">
+          <button
+            type="button"
+            onClick={() => setActiveTab('assistant')}
+            className="group flex items-center gap-2.5 px-4 py-3 rounded-full bg-linear-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-emerald-400/40"
+            title="Konsultasikan Jadwal & Langkah Perawatan Tanaman dengan Asisten AI"
+          >
+            <div className="relative">
+              <Bot className="w-5 h-5 text-white" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
+            </div>
+            <span className="font-extrabold text-xs sm:text-sm tracking-tight hidden sm:inline">
+              Tanya Asisten AI
+            </span>
+          </button>
+        </aside>
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t border-stone-200 mt-auto py-6">

@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,19 @@ const PORT = Number(process.env.PORT) || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json());
+
+// Initialize Google Gemini AI client
+const geminiApiKey = process.env.GEMINI_API_KEY || '';
+const ai = geminiApiKey
+  ? new GoogleGenAI({
+      apiKey: geminiApiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    })
+  : null;
 
 // Persistent Data Storage Path & Locked Supabase Config
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -572,6 +586,170 @@ app.delete('/api/expenses/:id', (req, res) => {
   db.expenses = db.expenses.filter((e: any) => e.id !== id);
   writeDatabase(db);
   res.json({ success: true });
+});
+
+async function generateGeminiContent(params: {
+  contents: any;
+  systemInstruction?: string;
+  temperature?: number;
+  topP?: number;
+  responseMimeType?: string;
+}) {
+  if (!ai) throw new Error('GEMINI_API_KEY belum dikonfigurasi di server.');
+
+  const models = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const config: any = {};
+      if (params.systemInstruction) config.systemInstruction = params.systemInstruction;
+      if (params.temperature !== undefined) config.temperature = params.temperature;
+      if (params.topP !== undefined) config.topP = params.topP;
+      if (params.responseMimeType) config.responseMimeType = params.responseMimeType;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: params.contents,
+        config
+      });
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = String(err?.message || '');
+      if (errMsg.includes('503') || errMsg.includes('demand') || errMsg.includes('UNAVAILABLE')) {
+        console.warn(`[Gemini] Model ${model} is experiencing high demand, falling back...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+// ====================================================================
+// ASISTEN AI TANIGUIDE (Jadwal & Langkah Perawatan Tanaman)
+// ====================================================================
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { message, plotContext, history } = req.body;
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ success: false, message: 'Pesan tidak boleh kosong' });
+    }
+
+    if (!ai) {
+      return res.status(500).json({
+        success: false,
+        message: 'Kunci GEMINI_API_KEY belum dikonfigurasi di server.'
+      });
+    }
+
+    let systemInstruction = `Anda adalah "Asisten Ahli Tani TaniGuide" — pakar agronomi, praktisi pertanian modern, dan konsultan budidaya tanaman pangan dan hortikultura di Indonesia (Padi, Jagung, Cabai, Tomat, Bawang Merah, Semangka/Melon, Kedelai, sayuran pekarangan, dan tanaman buah).
+
+FOKUS UTAMA KONSULTASI ANDA:
+1. Jadwal Perawatan Tanaman (Timeline HST / Hari Setelah Tanam):
+   - Jelaskan jadwal perawatan penting sesuai fase tanaman (fase bibit/vegetatif awal, anakan/percabangan aktif, pembungaan, pembesaran buah/bulir, pematangan, panen).
+2. Langkah-Langkah Perawatan Tanaman yang Baik:
+   - Pemupukan berimbang: rekomendasi jenis pupuk (NPK, Urea, SP-36, KCl, Kalsium/KNO3, pupuk kandang/kompos, pupuk hayati/POC).
+   - Takaran presisi: sediakan takaran baik untuk satuan hektar/m² maupun satuan POHON/BATANG/POLYBAG (misal: "10-15 gram NPK larutkan 200 ml air per pohon").
+   - Penyiraman & drainase: jadwal dan teknik penyiraman (kapan butuh air banyak, kapan harus dikeringkan/stop air sebelum panen).
+   - Pemangkasan (pruning tunas air / pewiwilan) untuk memaksimalkan hasil.
+   - Pengendalian Hama & Penyakit Terpadu (PHT): identifikasi gejala (kutu kebul, thrips, ulat grayak, sundep/beluk, antraknosa/patek, layu fusarium, jamur) dan penanganannya secara ramah lingkungan maupun kimiawi darurat.
+3. Gaya Bahasa & Format:
+   - Gunakan bahasa Indonesia yang bersahabat, menyemangati ("Rekan Petani", "Salam Tani!").
+   - Format rapi dengan heading singkat, bullet points, dan instruksi langkah demi langkah yang mudah dipraktikkan langsung di kebun.`;
+
+    if (plotContext) {
+      systemInstruction += `\n\nDATA LAHAN BUDIDAYA AKTIF PENGGUNA SAAT INI:
+- Nama Plot: ${plotContext.plot_name || '-'}
+- Komoditas: ${plotContext.crop_name || '-'} (${plotContext.variety || 'Lokal'})
+- Umur Saat Ini: ${plotContext.hst !== undefined ? `${plotContext.hst} HST (Hari Setelah Tanam)` : '-'}
+- Skala / Jumlah: ${plotContext.scale_quantity || '-'} ${plotContext.scale_unit || 'm²'} (Luas fisik: ~${plotContext.area_sqm || '-'} m²)
+- Tanggal Tanam: ${plotContext.planting_date || '-'}
+- Estimasi Panen: ${plotContext.estimated_harvest_date || '-'}
+${plotContext.pending_tasks && plotContext.pending_tasks.length > 0 ? `- Agenda Perawatan Terdekat: ${plotContext.pending_tasks.join(', ')}` : ''}
+
+Gunakan data lahan aktif di atas agar jawaban Anda sangat spesifik, relevan, dan langsung dapat diaplikasikan pengguna di lahannya!`;
+    }
+
+    const contents: any[] = [];
+    if (Array.isArray(history) && history.length > 0) {
+      for (const item of history.slice(-8)) {
+        if (item.role && item.text) {
+          contents.push({
+            role: item.role === 'user' ? 'user' : 'model',
+            parts: [{ text: String(item.text) }]
+          });
+        }
+      }
+    }
+    contents.push({
+      role: 'user',
+      parts: [{ text: message }]
+    });
+
+    const response = await generateGeminiContent({
+      contents,
+      systemInstruction,
+      temperature: 0.7,
+      topP: 0.95
+    });
+
+    const reply = response.text || 'Maaf, asisten AI tidak dapat menghasilkan tanggapan saat ini.';
+    return res.json({ success: true, reply });
+  } catch (error: any) {
+    console.error('Error calling Gemini in /api/ai/chat:', error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || 'Terjadi kesalahan saat menghubungi asisten AI'
+    });
+  }
+});
+
+// Rekomendasi Jadwal SOP Khusus Berbasis AI
+app.post('/api/ai/generate-tasks', async (req, res) => {
+  try {
+    const { cropName, variety, scaleQty, scaleUnit, plantingDate } = req.body;
+    if (!cropName) {
+      return res.status(400).json({ success: false, message: 'Nama komoditas harus diisi' });
+    }
+    if (!ai) {
+      return res.status(500).json({ success: false, message: 'GEMINI_API_KEY belum dikonfigurasi' });
+    }
+
+    const prompt = `Anda adalah pakar agronomi Indonesia. Buatkan jadwal tahapan perawatan dan checklist tugas budidaya tanaman untuk:
+Komoditas: ${cropName}
+Varietas: ${variety || 'Unggul / Lokal'}
+Skala Budidaya: ${scaleQty || 50} ${scaleUnit || 'pohon'}
+Tanggal Tanam: ${plantingDate || formatDate(new Date())}
+
+Buatkan 5 sampai 7 jadwal kegiatan perawatan titik kritis terpenting (fase pemupukan dasar, penyiangan, pemupukan susulan, pencegahan hama/penyakit, fase generatif, hingga panen).
+Kembalikan HANYA JSON array murni tanpa markdown/penjelasan tambahan, dengan format:
+[
+  {
+    "title": "Judul kegiatan",
+    "category": "pemupukan",
+    "hst": 7,
+    "dosage": "rekomendasi takaran pupuk per pohon atau per m2",
+    "description": "langkah pelaksanaan perawatan yang baik",
+    "priority": "high"
+  }
+]
+Kategori yang valid: "pemupukan" | "penyiangan" | "penyiraman" | "pengendalian_hama" | "perawatan" | "panen".
+Prioritas yang valid: "high" | "medium" | "low".`;
+
+    const response = await generateGeminiContent({
+      contents: prompt,
+      responseMimeType: 'application/json'
+    });
+
+    const jsonText = response.text?.trim() || '[]';
+    const tasks = JSON.parse(jsonText);
+    return res.json({ success: true, tasks });
+  } catch (error: any) {
+    console.error('Error in /api/ai/generate-tasks:', error);
+    return res.status(500).json({ success: false, message: error?.message || 'Gagal membuat jadwal tugas' });
+  }
 });
 
 // --- Vite Middlewares / Static Serving ---

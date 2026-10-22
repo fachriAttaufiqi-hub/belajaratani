@@ -11,7 +11,9 @@ import {
   ChevronDown,
   CheckCircle2,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 import { Planting } from '../types';
 
@@ -19,8 +21,8 @@ interface NavbarProps {
   plantings: Planting[];
   selectedPlotId: string;
   onSelectPlot: (plotId: string) => void;
-  activeTab: 'dashboard' | 'schedule' | 'logs' | 'guide';
-  onSelectTab: (tab: 'dashboard' | 'schedule' | 'logs' | 'guide') => void;
+  activeTab: 'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant';
+  onSelectTab: (tab: 'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant') => void;
   onOpenNewPlanting: () => void;
   onOpenSupabaseModal: () => void;
   onOpenFertilizerCalc: () => void;
@@ -208,6 +210,21 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Layers className="w-4 h-4" />
             <span>Katalog & Panduan SOP</span>
+          </button>
+
+          <button
+            onClick={() => onSelectTab('assistant')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap ${
+              activeTab === 'assistant'
+                ? 'bg-linear-to-r from-emerald-600 to-teal-700 text-white shadow-sm ring-2 ring-emerald-400/40'
+                : 'text-emerald-800 hover:text-emerald-950 bg-emerald-50/80 hover:bg-emerald-100/80 border border-emerald-200/80'
+            }`}
+          >
+            <Bot className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>Asisten AI Tani</span>
+            <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-950">
+              AI
+            </span>
           </button>
         </nav>
       </div>
