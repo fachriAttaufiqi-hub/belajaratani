@@ -336,11 +336,13 @@ export default function App() {
           <DashboardView
             plantings={plantings}
             tasks={tasks}
+            logs={logs}
             selectedPlotId={selectedPlotId}
             onSelectPlot={setSelectedPlotId}
             onToggleTask={handleToggleTask}
             onNavigateToSchedule={() => setActiveTab('schedule')}
             onNavigateToAssistant={() => setActiveTab('assistant')}
+            onNavigateToLogs={() => setActiveTab('logs')}
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
             onDeletePlanting={handleDeletePlanting}
             onOpenManagePlots={() => setIsManagePlotsOpen(true)}

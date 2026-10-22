@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Sprout, 
   Calendar, 
@@ -18,9 +18,16 @@ import {
   Trash2,
   X,
   Layers,
-  Bot
+  Bot,
+  BookOpenText,
+  FileText,
+  ClipboardCheck,
+  Tag,
+  MessageSquare,
+  Bug,
+  DollarSign
 } from 'lucide-react';
-import { Planting, TaskItem } from '../types';
+import { ActivityLog, Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
 import { DEFAULT_CROPS } from '../data/defaultCrops';
 import { formatPlantingScale, summarizePlantingsScale } from '../lib/scaleUnits';
@@ -29,11 +36,13 @@ import confetti from 'canvas-confetti';
 interface DashboardViewProps {
   plantings: Planting[];
   tasks: TaskItem[];
+  logs?: ActivityLog[];
   selectedPlotId: string;
   onSelectPlot: (plotId: string) => void;
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onNavigateToSchedule: () => void;
   onNavigateToAssistant?: () => void;
+  onNavigateToLogs?: () => void;
   onOpenNewPlanting: () => void;
   onDeletePlanting: (plotId: string) => void;
   onOpenManagePlots?: () => void;
@@ -43,11 +52,13 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   plantings,
   tasks,
+  logs = [],
   selectedPlotId,
   onSelectPlot,
   onToggleTask,
   onNavigateToSchedule,
   onNavigateToAssistant,
+  onNavigateToLogs,
   onOpenNewPlanting,
   onDeletePlanting,
   onOpenManagePlots,
@@ -55,6 +66,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const todayStr = formatDate(new Date());
   const [plantingToDelete, setPlantingToDelete] = useState<Planting | null>(null);
+  const [journalTab, setJournalTab] = useState<'logs' | 'completed_tasks'>('logs');
 
   // Filter tasks based on selected plot
   const activeTasks = selectedPlotId === 'all' 
@@ -87,6 +99,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
   const nearestHarvest = upcomingHarvests[0];
+
+  // Filtered field logs (sorted by date descending)
+  const filteredLogs = useMemo(() => {
+    const list = selectedPlotId === 'all'
+      ? [...logs]
+      : logs.filter(l => l.planting_id === selectedPlotId);
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [logs, selectedPlotId]);
+
+  // Completed tasks (sorted by completion date or due date descending)
+  const completedTasks = useMemo(() => {
+    const list = selectedPlotId === 'all'
+      ? tasks.filter(t => t.is_completed)
+      : tasks.filter(t => t.planting_id === selectedPlotId && t.is_completed);
+    return list.sort((a, b) => {
+      const dateA = a.completed_at || a.due_date;
+      const dateB = b.completed_at || b.due_date;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+  }, [tasks, selectedPlotId]);
 
   const handleCheckboxClick = (taskId: string, currentStatus: boolean) => {
     onToggleTask(taskId, !currentStatus);
@@ -571,6 +603,250 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* ================================================================ */}
+      {/* CATATAN LAPANGAN & HAL-HAL YANG SUDAH DIKERJAKAN                 */}
+      {/* ================================================================ */}
+      <div className="bg-white rounded-3xl p-6 sm:p-7 border border-stone-200/90 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-emerald-100 text-emerald-800 shrink-0">
+              <BookOpenText className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight">
+                  Catatan Harian & Hal yang Sudah Dikerjakan
+                </h2>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  {journalTab === 'logs' ? `${filteredLogs.length} Catatan` : `${completedTasks.length} Tugas Selesai`}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
+                Rekam jejak catatan lapangan yang telah Anda tulis serta riwayat perawatan budidaya yang telah rampung.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            {/* Tab Switcher */}
+            <div className="bg-stone-100 p-1 rounded-2xl flex items-center border border-stone-200/80">
+              <button
+                type="button"
+                onClick={() => setJournalTab('logs')}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+                  journalTab === 'logs'
+                    ? 'bg-white text-emerald-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Catatan Lapangan ({filteredLogs.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setJournalTab('completed_tasks')}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+                  journalTab === 'completed_tasks'
+                    ? 'bg-white text-emerald-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                <span>Tugas Selesai ({completedTasks.length})</span>
+              </button>
+            </div>
+
+            {onNavigateToLogs && (
+              <button
+                type="button"
+                onClick={onNavigateToLogs}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>+ Tulis Catatan Baru</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* TAB 1: CATATAN LAPANGAN / JURNAL YANG SUDAH DITULIS */}
+        {journalTab === 'logs' && (
+          <div>
+            {filteredLogs.length === 0 ? (
+              <div className="py-12 px-4 rounded-2xl border border-dashed border-stone-300 text-center space-y-3 bg-stone-50/50">
+                <div className="w-14 h-14 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl shadow-inner">
+                  📝
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-stone-800">Belum ada catatan lapangan yang ditulis</h4>
+                  <p className="text-xs text-stone-500 max-w-md mx-auto mt-1 leading-relaxed">
+                    Catat pengamatan kebun harian Anda, seperti kemunculan tunas baru, serangan hama, curah hujan, dosis kocor mandiri, hingga panen.
+                  </p>
+                </div>
+                {onNavigateToLogs && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToLogs}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>Mulai Tulis Catatan Pertama</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredLogs.map((log) => {
+                  const plot = plantings.find(p => p.id === log.planting_id);
+                  const typeLabel = 
+                    log.type === 'hama_penyakit' ? 'Hama & Penyakit' :
+                    log.type === 'cuaca' ? 'Cuaca' :
+                    log.type === 'pengeluaran' ? 'Pengeluaran' :
+                    log.type === 'panen' ? 'Panen' : 'Catatan Lapangan';
+
+                  const typeColor = 
+                    log.type === 'hama_penyakit' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                    log.type === 'cuaca' ? 'bg-sky-50 text-sky-800 border-sky-200' :
+                    log.type === 'pengeluaran' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                    log.type === 'panen' ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                    'bg-emerald-50 text-emerald-800 border-emerald-200';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="rounded-2xl p-4 sm:p-5 border border-stone-200/90 bg-stone-50/60 hover:bg-white hover:border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${typeColor}`}>
+                            {typeLabel}
+                          </span>
+                          <span className="text-[11px] font-semibold text-stone-500 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                            <span>{log.date}</span>
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="font-extrabold text-stone-900 text-sm sm:text-base leading-snug">
+                            {log.title}
+                          </h4>
+                          {plot && (
+                            <p className="text-[11px] font-semibold text-emerald-800 mt-0.5 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-emerald-600" />
+                              <span>{plot.plot_name} • {plot.crop_name}</span>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Isi Catatan yang ditulis pengguna */}
+                        <div className="p-3 rounded-xl bg-white border border-stone-200/70 text-xs text-stone-700 leading-relaxed whitespace-pre-line shadow-2xs font-normal">
+                          {log.notes}
+                        </div>
+                      </div>
+
+                      {/* Extra info badges if available */}
+                      <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between text-[11px] text-stone-500 flex-wrap gap-2">
+                        {log.weather_condition && (
+                          <span className="inline-flex items-center gap-1 font-semibold text-stone-600">
+                            {log.weather_condition === 'cerah' && '☀️ Cerah'}
+                            {log.weather_condition === 'hujan_ringan' && '🌦️ Hujan Ringan'}
+                            {log.weather_condition === 'hujan_deras' && '🌧️ Hujan Deras'}
+                            {log.weather_condition === 'berawan' && '⛅ Berawan'}
+                            {log.weather_condition === 'kering_panas' && '🔥 Kering Panas'}
+                          </span>
+                        )}
+                        {log.harvest_yield_kg && (
+                          <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                            Panen: {log.harvest_yield_kg} kg
+                          </span>
+                        )}
+                        {log.cost_amount && (
+                          <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                            Biaya: Rp {Number(log.cost_amount).toLocaleString('id-ID')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: TUGAS & TINDAKAN YANG SUDAH SELESAI */}
+        {journalTab === 'completed_tasks' && (
+          <div>
+            {completedTasks.length === 0 ? (
+              <div className="py-12 px-4 rounded-2xl border border-dashed border-stone-300 text-center space-y-2 bg-stone-50/50">
+                <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl shadow-inner">
+                  ⏳
+                </div>
+                <h4 className="text-base font-bold text-stone-800">Belum ada tugas yang diselesaikan</h4>
+                <p className="text-xs text-stone-500 max-w-md mx-auto">
+                  Centang tugas pada checklist di atas setelah Anda melakukan pemupukan, penyiraman, atau perawatan agar tercatat di sini.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {completedTasks.map((task) => {
+                  const plot = plantings.find(p => p.id === task.planting_id);
+                  return (
+                    <div
+                      key={task.id}
+                      className="p-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 hover:bg-emerald-50/70 transition flex flex-col justify-between space-y-2.5"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{task.hst} HST</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-stone-500">
+                            Selesai: {task.completed_at || task.due_date}
+                          </span>
+                        </div>
+
+                        <h4 className="font-extrabold text-stone-900 text-sm leading-snug">
+                          {task.title}
+                        </h4>
+
+                        {plot && (
+                          <p className="text-[11px] text-stone-600 flex items-center gap-1 font-medium">
+                            <MapPin className="w-3 h-3 text-stone-400" />
+                            <span>{plot.plot_name}</span>
+                          </p>
+                        )}
+
+                        {task.dosage && (
+                          <div className="text-[11px] font-semibold text-emerald-900 bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-200/60 mt-1">
+                            Takaran: {task.dosage}
+                          </div>
+                        )}
+
+                        {task.completion_notes && (
+                          <div className="text-xs text-stone-700 bg-white p-2.5 rounded-xl border border-emerald-200/70 italic mt-1">
+                            "{task.completion_notes}"
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-emerald-100 flex items-center justify-between text-[10px] text-stone-500">
+                        <span className="capitalize font-bold text-emerald-800">
+                          Kategori: {task.category.replace('_', ' ')}
+                        </span>
+                        <span className="text-emerald-700 font-extrabold">✓ Terverifikasi Selesai</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Modal Konfirmasi Hapus Lahan */}

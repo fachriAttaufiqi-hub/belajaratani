@@ -118,10 +118,13 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       pending_tasks: pendingTasks.slice(0, 5)
     } : undefined;
 
-    const historyPayload = messages.slice(-6).map(m => ({
-      role: m.role,
-      text: m.text
-    }));
+    const historyPayload = messages
+      .filter(m => m.id !== 'welcome-msg')
+      .slice(-6)
+      .map(m => ({
+        role: m.role,
+        text: m.text
+      }));
 
     const res = await sendAIChatMessage(textToSend.trim(), plotContext, historyPayload);
 
