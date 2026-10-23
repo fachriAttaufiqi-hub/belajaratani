@@ -7,18 +7,13 @@ import {
   Plus, 
   MapPin, 
   Calendar, 
-  TrendingUp, 
   CheckCircle2, 
   Clock, 
   DollarSign, 
-  ChevronRight,
-  RotateCcw,
-  Sparkles,
-  Layers
+  ChevronRight
 } from 'lucide-react';
 import { Planting, TaskItem, ActivityLog, ExpenseRecord } from '../types';
-import { calculateHST, formatDate } from '../lib/storage';
-import { DEFAULT_CROPS } from '../data/defaultCrops';
+import { calculateHST } from '../lib/storage';
 import { formatPlantingScale, summarizePlantingsScale } from '../lib/scaleUnits';
 
 interface ManagePlotsModalProps {
@@ -32,7 +27,6 @@ interface ManagePlotsModalProps {
   onDeletePlanting: (plotId: string) => Promise<void> | void;
   onOpenNewPlanting: () => void;
   onNavigateToSchedule: (plotId: string) => void;
-  onRestoreMasterData?: () => void;
 }
 
 export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
@@ -45,8 +39,7 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
   onSelectPlot,
   onDeletePlanting,
   onOpenNewPlanting,
-  onNavigateToSchedule,
-  onRestoreMasterData
+  onNavigateToSchedule
 }) => {
   const [plotToDelete, setPlotToDelete] = useState<Planting | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -152,12 +145,12 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
                 🌱
               </div>
               <div className="max-w-md mx-auto">
-                <h3 className="text-base font-bold text-stone-800">Belum ada lahan pertanian yang terdaftar</h3>
+                <h3 className="text-base font-bold text-stone-800">Belum ada lahan pertanian di Supabase</h3>
                 <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                  Semua lahan telah dihapus atau belum ditambahkan. Anda dapat membuat lahan budidaya baru atau memulihkan dataset contoh pertanian (Padi, Jagung, Cabai).
+                  Lahan budidaya yang Anda buat langsung tersimpan ke Supabase Cloud dan sinkron realtime.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <div className="flex items-center justify-center pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -169,28 +162,25 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
                   <Plus className="w-4 h-4 stroke-[3]" />
                   <span>Tambah Lahan Baru</span>
                 </button>
-                {onRestoreMasterData && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onRestoreMasterData();
-                      onClose();
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Pulihkan Data Master</span>
-                  </button>
-                )}
               </div>
             </div>
           ) : (
             <div className="space-y-3.5">
               {plantings.map((planting) => {
                 const hst = calculateHST(planting.planting_date);
-                const crop = DEFAULT_CROPS.find(c => c.id === planting.crop_id);
-                const targetHst = crop ? crop.harvestDaysMax : 100;
+                const plantingDateMs = new Date(planting.planting_date).getTime();
+                const harvestDateMs = planting.estimated_harvest_date ? new Date(planting.estimated_harvest_date).getTime() : 0;
+                const diffDays = harvestDateMs > plantingDateMs ? Math.round((harvestDateMs - plantingDateMs) / (1000 * 60 * 60 * 24)) : 90;
+                const targetHst = diffDays > 0 ? diffDays : 90;
                 const progressPct = Math.min(100, Math.max(0, Math.round((hst / targetHst) * 100)));
+
+                const cropNameLower = (planting.crop_name || '').toLowerCase();
+                const cropIcon = cropNameLower.includes('cabai') ? '🌶️' :
+                                 cropNameLower.includes('jagung') ? '🌽' :
+                                 cropNameLower.includes('padi') ? '🌾' :
+                                 cropNameLower.includes('bawang') ? '🧅' :
+                                 cropNameLower.includes('tomat') ? '🍅' :
+                                 cropNameLower.includes('melon') || cropNameLower.includes('semangka') ? '🍉' : '🌱';
 
                 const plotTasks = tasks.filter(t => t.planting_id === planting.id);
                 const plotTasksCompleted = plotTasks.filter(t => t.is_completed).length;
@@ -206,7 +196,7 @@ export const ManagePlotsModal: React.FC<ManagePlotsModalProps> = ({
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="flex items-start gap-3.5">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl shrink-0 shadow-inner">
-                          {crop?.icon || '🌱'}
+                          {cropIcon}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">

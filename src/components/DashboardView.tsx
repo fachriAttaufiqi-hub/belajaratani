@@ -7,29 +7,21 @@ import {
   AlertTriangle, 
   TrendingUp, 
   Sun, 
-  CloudRain, 
-  Droplets, 
   ChevronRight, 
   Sparkles,
   MapPin,
   Check,
   Plus,
-  RotateCcw,
   Trash2,
   X,
   Layers,
   Bot,
   BookOpenText,
   FileText,
-  ClipboardCheck,
-  Tag,
-  MessageSquare,
-  Bug,
-  DollarSign
+  ClipboardCheck
 } from 'lucide-react';
 import { ActivityLog, Planting, TaskItem } from '../types';
 import { calculateHST, formatDate } from '../lib/storage';
-import { DEFAULT_CROPS } from '../data/defaultCrops';
 import { formatPlantingScale, summarizePlantingsScale } from '../lib/scaleUnits';
 import confetti from 'canvas-confetti';
 
@@ -46,7 +38,6 @@ interface DashboardViewProps {
   onOpenNewPlanting: () => void;
   onDeletePlanting: (plotId: string) => void;
   onOpenManagePlots?: () => void;
-  onRestoreMasterData?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -61,8 +52,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToLogs,
   onOpenNewPlanting,
   onDeletePlanting,
-  onOpenManagePlots,
-  onRestoreMasterData
+  onOpenManagePlots
 }) => {
   const todayStr = formatDate(new Date());
   const [plantingToDelete, setPlantingToDelete] = useState<Planting | null>(null);
@@ -91,8 +81,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const upcomingHarvests = [...plantings]
     .map(p => {
       const hst = calculateHST(p.planting_date);
-      const crop = DEFAULT_CROPS.find(c => c.id === p.crop_id);
-      const targetHst = crop ? crop.harvestDaysMax : 100;
+      const plantingDateMs = new Date(p.planting_date).getTime();
+      const harvestDateMs = p.estimated_harvest_date ? new Date(p.estimated_harvest_date).getTime() : 0;
+      const diffDays = harvestDateMs > plantingDateMs ? Math.round((harvestDateMs - plantingDateMs) / (1000 * 60 * 60 * 24)) : 90;
+      const targetHst = diffDays > 0 ? diffDays : 90;
       const daysLeft = Math.max(0, targetHst - hst);
       return { ...p, currentHst: hst, daysLeft, targetHst };
     })
@@ -285,21 +277,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 🌱
               </div>
               <div>
-                <h3 className="text-base font-bold text-stone-800">Belum ada lahan budidaya aktif</h3>
+                <h3 className="text-base font-bold text-stone-800">Belum ada lahan budidaya di Supabase</h3>
                 <p className="text-xs text-stone-500 max-w-md mx-auto mt-1 leading-relaxed">
-                  Data Anda baru saja terhapus saat membersihkan Google Chrome? Jangan khawatir! Anda dapat langsung memulihkan data budidaya lengkap (Padi, Jagung, Cabai beserta jadwal SOP dan catatan) dengan tombol di bawah.
+                  Lahan budidaya yang Anda buat akan langsung disimpan ke Supabase Cloud dan sinkron di semua gawai.
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
-                {onRestoreMasterData && (
-                  <button
-                    onClick={onRestoreMasterData}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4 stroke-[2.5]" />
-                    Pulihkan Data Master Pertanian
-                  </button>
-                )}
+              <div className="flex items-center justify-center pt-1">
                 <button
                   onClick={onOpenNewPlanting}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-md hover:bg-emerald-700 transition cursor-pointer"
@@ -313,9 +296,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="space-y-3.5">
               {activePlantings.map((planting) => {
                 const hst = calculateHST(planting.planting_date);
-                const crop = DEFAULT_CROPS.find(c => c.id === planting.crop_id);
-                const targetHst = crop ? crop.harvestDaysMax : 100;
+                const plantingDateMs = new Date(planting.planting_date).getTime();
+                const harvestDateMs = planting.estimated_harvest_date ? new Date(planting.estimated_harvest_date).getTime() : 0;
+                const diffDays = harvestDateMs > plantingDateMs ? Math.round((harvestDateMs - plantingDateMs) / (1000 * 60 * 60 * 24)) : 90;
+                const targetHst = diffDays > 0 ? diffDays : 90;
                 const progressPct = Math.min(100, Math.max(0, Math.round((hst / targetHst) * 100)));
+                
+                const cropNameLower = (planting.crop_name || '').toLowerCase();
+                const cropIcon = cropNameLower.includes('cabai') ? '🌶️' :
+                                 cropNameLower.includes('jagung') ? '🌽' :
+                                 cropNameLower.includes('padi') ? '🌾' :
+                                 cropNameLower.includes('bawang') ? '🧅' :
+                                 cropNameLower.includes('tomat') ? '🍅' :
+                                 cropNameLower.includes('melon') || cropNameLower.includes('semangka') ? '🍉' : '🌱';
                 
                 // Tasks for this specific plot
                 const plotTasks = tasks.filter(t => t.planting_id === planting.id);
@@ -329,7 +322,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-2xl shadow-inner">
-                          {crop?.icon || '🌱'}
+                          {cropIcon}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">

@@ -4,17 +4,22 @@ import { getSupabaseClient, broadcastRealtimeChange } from './supabase';
 import { idbGet, idbSet, requestPersistentStorage } from './indexedDb';
 
 const STORAGE_KEYS = {
-  PLANTINGS: 'taniguide_plantings_v3',
-  TASKS: 'taniguide_tasks_v3',
-  LOGS: 'taniguide_logs_v3',
-  EXPENSES: 'taniguide_expenses_v3',
-  INITIALIZED: 'taniguide_initialized_v3'
+  PLANTINGS: 'taniguide_plantings_v4',
+  TASKS: 'taniguide_tasks_v4',
+  LOGS: 'taniguide_logs_v4',
+  EXPENSES: 'taniguide_expenses_v4'
 };
 
-// Clean legacy demo/mock data from previous versions if present
-(function cleanLegacyStorage() {
+// Clean legacy demo/mock data from previous versions
+export function purgeLegacyMockData() {
+  if (typeof window === 'undefined') return;
   try {
     const legacyKeys = [
+      'taniguide_plantings_v3',
+      'taniguide_tasks_v3',
+      'taniguide_logs_v3',
+      'taniguide_expenses_v3',
+      'taniguide_initialized_v3',
       'taniguide_plantings_v2',
       'taniguide_tasks_v2',
       'taniguide_logs_v2',
@@ -26,11 +31,35 @@ const STORAGE_KEYS = {
       'taniguide_expenses',
       'taniguide_initialized'
     ];
-    legacyKeys.forEach(k => localStorage.removeItem(k));
+    legacyKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+
+    // Check v4 storage for mock plot names and remove if present
+    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+    if (rawPlantings) {
+      const parsed = JSON.parse(rawPlantings);
+      if (Array.isArray(parsed)) {
+        const hasMock = parsed.some((p: any) => 
+          p.plot_name === 'Lahan Barat (Petak A)' ||
+          p.plot_name === 'Kebun Mulsa Blok B (500 Pohon)' ||
+          p.plot_name === 'Sawah Irigasi Desa C (0.5 Ha)'
+        );
+        if (hasMock) {
+          localStorage.removeItem(STORAGE_KEYS.PLANTINGS);
+          localStorage.removeItem(STORAGE_KEYS.TASKS);
+          localStorage.removeItem(STORAGE_KEYS.LOGS);
+          localStorage.removeItem(STORAGE_KEYS.EXPENSES);
+        }
+      }
+    }
   } catch {
     // ignore
   }
-})();
+}
+
+// Run purge on module load
+purgeLegacyMockData();
 
 // Standard compliant UUID generator
 export function generateUUID(): string {
@@ -71,161 +100,67 @@ export function calculateHST(plantingDateStr: string): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 }
 
-// Generate automatic tasks for a planting with UUIDs
+// Generate automatic tasks for a planting
 export function generateTasksForPlanting(planting: Planting): TaskItem[] {
+  // If matched in templates, use standard stages
   const crop = DEFAULT_CROPS.find(c => c.id === planting.crop_id);
-  if (!crop) return [];
+  if (crop && Array.isArray(crop.standardStages) && crop.standardStages.length > 0) {
+    return crop.standardStages.map((stage) => {
+      const dueDate = addDays(planting.planting_date, stage.hst);
+      const currentHst = calculateHST(planting.planting_date);
+      const isPast = currentHst >= stage.hst;
 
-  return crop.standardStages.map((stage) => {
-    const dueDate = addDays(planting.planting_date, stage.hst);
-    const currentHst = calculateHST(planting.planting_date);
-    const isPast = currentHst >= stage.hst;
+      return {
+        id: generateUUID(),
+        planting_id: planting.id,
+        title: stage.title,
+        category: stage.category,
+        hst: stage.hst,
+        due_date: dueDate,
+        dosage: stage.dosageRecommendation,
+        description: stage.description,
+        priority: stage.priority,
+        is_completed: isPast && stage.hst < currentHst - 3,
+        completed_at: isPast && stage.hst < currentHst - 3 ? dueDate : null,
+        completion_notes: isPast && stage.hst < currentHst - 3 ? 'Selesai sesuai rekomendasi SOP' : ''
+      };
+    });
+  }
 
+  // Generic fallback stages for custom user crops
+  const pDate = planting.planting_date;
+  const currentHst = calculateHST(pDate);
+
+  const genericStages = [
+    { title: 'Tanam & Pemupukan Dasar Organik', hst: 0, category: 'perawatan' as const, desc: 'Tanam benih/bibit dan berikan pupuk dasar' },
+    { title: 'Pemupukan Susulan I (Fase Awal Vegetatif)', hst: 14, category: 'pemupukan' as const, desc: 'Aplikasi pupuk NPK untuk pertumbuhan tunas dan daun' },
+    { title: 'Penyiangan Gulma & Pembumbunan Tanah', hst: 28, category: 'penyiangan' as const, desc: 'Bersihkan rumput liar dan gemburkan tanah di sekitar perakaran' },
+    { title: 'Pemupukan Susulan II (Fase Pembungaan / Generatif)', hst: 42, category: 'pemupukan' as const, desc: 'Aplikasi pupuk NPK dan Kalium untuk pembentukan bunga dan buah' },
+    { title: 'Monitoring & Pengendalian Hama / Penyakit', hst: 55, category: 'pengendalian_hama' as const, desc: 'Periksa daun dan buah dari serangan hama atau jamur' },
+    { title: 'Panen Raya Hasil Budidaya', hst: 90, category: 'panen' as const, desc: 'Panen hasil tanaman yang telah masak fisiologis prima' }
+  ];
+
+  return genericStages.map(s => {
+    const dueDate = addDays(pDate, s.hst);
+    const isPast = currentHst >= s.hst;
     return {
       id: generateUUID(),
       planting_id: planting.id,
-      title: stage.title,
-      category: stage.category,
-      hst: stage.hst,
+      title: s.title,
+      category: s.category,
+      hst: s.hst,
       due_date: dueDate,
-      dosage: stage.dosageRecommendation,
-      description: stage.description,
-      priority: stage.priority,
-      is_completed: isPast && stage.hst < currentHst - 3,
-      completed_at: isPast && stage.hst < currentHst - 3 ? dueDate : null,
-      completion_notes: isPast && stage.hst < currentHst - 3 ? 'Selesai sesuai rekomendasi SOP' : ''
+      dosage: 'Sesuai anjuran budidaya',
+      description: s.desc,
+      priority: 'high' as const,
+      is_completed: isPast && s.hst < currentHst - 3,
+      completed_at: isPast && s.hst < currentHst - 3 ? dueDate : null,
+      completion_notes: isPast && s.hst < currentHst - 3 ? 'Selesai' : ''
     };
   });
 }
 
-export function initLocalStorageIfEmpty() {
-  requestPersistentStorage().catch(() => {});
-  const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-  if (!rawPlantings || rawPlantings === '[]') {
-    const master = generateDefaultMasterDataset();
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(master.tasks));
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(master.logs));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(master.expenses));
-    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
-
-    // Simpan juga ke IndexedDB agar tahan hapus Chrome
-    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
-    idbSet(STORAGE_KEYS.TASKS, master.tasks).catch(() => {});
-    idbSet(STORAGE_KEYS.LOGS, master.logs).catch(() => {});
-    idbSet(STORAGE_KEYS.EXPENSES, master.expenses).catch(() => {});
-
-    return master;
-  }
-  return null;
-}
-
-export async function syncStorageFromIndexedDbIfEmpty(): Promise<boolean> {
-  try {
-    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    if (!rawPlantings || rawPlantings === '[]') {
-      const idbPlantings = await idbGet<Planting[]>(STORAGE_KEYS.PLANTINGS);
-      if (idbPlantings && Array.isArray(idbPlantings) && idbPlantings.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(idbPlantings));
-        const idbTasks = await idbGet<TaskItem[]>(STORAGE_KEYS.TASKS);
-        if (idbTasks) localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(idbTasks));
-        const idbLogs = await idbGet<ActivityLog[]>(STORAGE_KEYS.LOGS);
-        if (idbLogs) localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(idbLogs));
-        const idbExpenses = await idbGet<ExpenseRecord[]>(STORAGE_KEYS.EXPENSES);
-        if (idbExpenses) localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(idbExpenses));
-        return true;
-      }
-    }
-  } catch (e) {
-    console.warn('Sync from IDB error:', e);
-  }
-  return false;
-}
-
-// Data Access Layer with Supabase + Local Storage Dual Layer
-export async function ensureCropsInSupabase(supabase: any) {
-  try {
-    const cropsPayload = DEFAULT_CROPS.map(c => ({
-      id: c.id,
-      name: c.name,
-      latin_name: c.latinName,
-      category: c.category,
-      variety_examples: c.varietyExamples,
-      harvest_days_min: c.harvestDaysMin,
-      harvest_days_max: c.harvestDaysMax,
-      icon: c.icon,
-      description: c.description
-    }));
-    const { error } = await supabase.from('crops').upsert(cropsPayload, { onConflict: 'id' });
-    if (error) {
-      console.warn('Gagal upsert crops ke Supabase:', error.message);
-    }
-  } catch (err) {
-    console.warn('Auto seed crops in Supabase warning:', err);
-  }
-}
-
-export async function ensurePlantingExistsInSupabase(supabase: any, plantingId: string): Promise<boolean> {
-  if (!supabase || !plantingId) return false;
-  try {
-    // 1. Pastikan seluruh master komoditas ada di tabel crops
-    await ensureCropsInSupabase(supabase);
-
-    // 2. Cek apakah planting sudah ada di database Supabase
-    const { data: pCheck, error: checkErr } = await supabase
-      .from('plantings')
-      .select('id')
-      .eq('id', plantingId)
-      .maybeSingle();
-
-    if (!checkErr && pCheck && pCheck.id) {
-      return true;
-    }
-
-    // 3. Ambil data planting dari localStorage
-    initLocalStorageIfEmpty();
-    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
-    let currentP = plantings.find(p => p.id === plantingId);
-
-    if (!currentP) {
-      return false;
-    }
-
-    const plantingPayload: any = {
-      id: currentP.id,
-      crop_id: currentP.crop_id || 'jagung',
-      crop_name: currentP.crop_name || 'Tanaman',
-      variety: currentP.variety || 'Lokal',
-      plot_name: currentP.plot_name || 'Lahan',
-      area_sqm: Number(currentP.area_sqm) || 1000,
-      scale_quantity: currentP.scale_quantity !== undefined ? currentP.scale_quantity : (Number(currentP.area_sqm) || 1000),
-      scale_unit: currentP.scale_unit || 'm2',
-      planting_date: currentP.planting_date || formatDate(new Date()),
-      estimated_harvest_date: currentP.estimated_harvest_date || addDays(formatDate(new Date()), 90),
-      status: currentP.status || 'active',
-      notes: currentP.notes || ''
-    };
-
-    let { error: upsertErr } = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
-    if (upsertErr && upsertErr.message && upsertErr.message.toLowerCase().includes('column')) {
-      delete plantingPayload.scale_quantity;
-      delete plantingPayload.scale_unit;
-      const retry = await supabase.from('plantings').upsert([plantingPayload], { onConflict: 'id' });
-      upsertErr = retry.error;
-    }
-    if (upsertErr) {
-      console.warn('Gagal upsert planting di Supabase:', upsertErr.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('Exception di ensurePlantingExistsInSupabase:', err);
-    return false;
-  }
-}
-
-// Cached in-memory promise for fetch('/api/data') so multiple calls in Promise.all share 1 request
+// Cached in-memory promise for fetch('/api/data')
 let serverDataCache: any = null;
 let lastServerFetchTime = 0;
 
@@ -246,185 +181,27 @@ export async function fetchServerData(forceRefresh = false): Promise<any | null>
       if (json && json.success && json.data) {
         serverDataCache = json.data;
         lastServerFetchTime = now;
-        // Sync to localStorage as offline mirror
-        if (Array.isArray(json.data.plantings)) {
-          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(json.data.plantings));
-        }
-        if (Array.isArray(json.data.tasks)) {
-          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks));
-        }
-        if (Array.isArray(json.data.logs)) {
-          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(json.data.logs));
-        }
-        if (Array.isArray(json.data.expenses)) {
-          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(json.data.expenses));
-        }
         return json.data;
       }
     }
   } catch {
-    // API not available (e.g. running statically on GitHub Pages)
+    // API not available
   }
   return null;
-}
-
-export function generateDefaultMasterDataset() {
-  const today = new Date();
-  const todayStr = formatDate(today);
-
-  // Plot 1: Jagung Hibrida (HST 14)
-  const jagungPlantDate = new Date(today);
-  jagungPlantDate.setDate(jagungPlantDate.getDate() - 14);
-  const jagungPlantStr = formatDate(jagungPlantDate);
-  const jagungHarvestStr = addDays(jagungPlantStr, 100);
-  const plot1Id = generateUUID();
-
-  const plot1: Planting = {
-    id: plot1Id,
-    crop_id: 'jagung',
-    crop_name: 'Jagung Hibrida / Manis',
-    variety: 'NK 212',
-    plot_name: 'Lahan Barat (Petak A)',
-    area_sqm: 2500,
-    scale_quantity: 2500,
-    scale_unit: 'm2',
-    planting_date: jagungPlantStr,
-    estimated_harvest_date: jagungHarvestStr,
-    status: 'active',
-    notes: 'Jarak tanam 70x20 cm, pupuk dasar kompos kandang 500 kg.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 2: Cabai Rawit (HST 28 - Skala 500 Pohon)
-  const cabaiPlantDate = new Date(today);
-  cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
-  const cabaiPlantStr = formatDate(cabaiPlantDate);
-  const cabaiHarvestStr = addDays(cabaiPlantStr, 85);
-  const plot2Id = generateUUID();
-
-  const plot2: Planting = {
-    id: plot2Id,
-    crop_id: 'cabai',
-    crop_name: 'Cabai Rawit / Merah',
-    variety: 'Ori 212',
-    plot_name: 'Kebun Mulsa Blok B (500 Pohon)',
-    area_sqm: 1200,
-    scale_quantity: 500,
-    scale_unit: 'pohon',
-    planting_date: cabaiPlantStr,
-    estimated_harvest_date: cabaiHarvestStr,
-    status: 'active',
-    notes: '500 pohon bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 3: Padi Sawah (HST 45 - 0.5 Ha)
-  const padiPlantDate = new Date(today);
-  padiPlantDate.setDate(padiPlantDate.getDate() - 45);
-  const padiPlantStr = formatDate(padiPlantDate);
-  const padiHarvestStr = addDays(padiPlantStr, 110);
-  const plot3Id = generateUUID();
-
-  const plot3: Planting = {
-    id: plot3Id,
-    crop_id: 'padi',
-    crop_name: 'Padi Sawah',
-    variety: 'Inpari 32',
-    plot_name: 'Sawah Irigasi Desa C (0.5 Ha)',
-    area_sqm: 5000,
-    scale_quantity: 0.5,
-    scale_unit: 'hektar',
-    planting_date: padiPlantStr,
-    estimated_harvest_date: padiHarvestStr,
-    status: 'active',
-    notes: 'Sistem jajar legowo 2:1, irigasi macak-macak berselang.',
-    created_at: new Date().toISOString()
-  };
-
-  const plantings = [plot1, plot2, plot3];
-  const tasks: TaskItem[] = [
-    ...generateTasksForPlanting(plot1),
-    ...generateTasksForPlanting(plot2),
-    ...generateTasksForPlanting(plot3)
-  ];
-
-  const logs: ActivityLog[] = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: todayStr,
-      type: 'catatan_lapangan',
-      title: 'Tinggi tanaman jagung rata-rata 40 cm',
-      notes: 'Batang hijau sehat, daun kokoh setelah pemupukan susulan pertama.',
-      weather_condition: 'cerah',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: addDays(todayStr, -2),
-      type: 'hama_penyakit',
-      title: 'Pantau serangga thrips & kutu kebul',
-      notes: 'Pucuk daun aman, daun muda tidak ada keriting.',
-      weather_condition: 'berawan',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot3Id,
-      date: addDays(todayStr, -4),
-      type: 'cuaca',
-      title: 'Pengairan berselang pintu air sawah',
-      notes: 'Air sawah dikeringkan selama 3 hari untuk merangsang akar padi mendalam.',
-      weather_condition: 'cerah',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    }
-  ];
-
-  const expenses: ExpenseRecord[] = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: jagungPlantStr,
-      category: 'benih',
-      item_name: 'Benih Jagung Hibrida NK 212 (5 kg)',
-      amount: 475000,
-      notes: 'Toko Tani Makmur Sejahtera'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: addDays(jagungPlantStr, 14),
-      category: 'pupuk',
-      item_name: 'Pupuk NPK Phonska & Urea (2 Karung)',
-      amount: 320000,
-      notes: 'Pemupukan susulan 1'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: cabaiPlantStr,
-      category: 'peralatan',
-      item_name: 'Mulsa Plastik Hitam Perak & Ajir Bambu',
-      amount: 650000,
-      notes: 'Kebutuhan bedengan kebun cabai'
-    }
-  ];
-
-  return { plantings, tasks, logs, expenses };
 }
 
 export const FarmDB = {
   // --- Plantings ---
   async getPlantings(): Promise<Planting[]> {
-    // 1. SUPABASE MASTER (Sumber Kebenaran Utama Realtime & Antar Gawai)
+    // 1. SUPABASE MASTER - Sumber Kebenaran Utama
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('plantings').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('plantings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
         if (!error && Array.isArray(data)) {
           localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(data));
           idbSet(STORAGE_KEYS.PLANTINGS, data).catch(() => {});
@@ -437,46 +214,42 @@ export const FarmDB = {
       }
     }
 
-    // 2. Server Backend (Mirror Cadangan)
+    // 2. Server Backend Mirror
     const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.plantings) && serverData.plantings.length > 0) {
+    if (serverData && Array.isArray(serverData.plantings)) {
       return serverData.plantings;
     }
 
-    // 3. Coba pulihkan dari IndexedDB jika LocalStorage kosong/dihapus Chrome
-    await syncStorageFromIndexedDbIfEmpty();
+    // 3. Fallback Offline Local Storage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
 
-    // 4. Local Storage
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-
-    // 5. Jika benar-benar kosong, gunakan dataset master
-    const master = generateDefaultMasterDataset();
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
-    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
-    return master.plantings;
+    // Return clean empty array - TIDAK ADA DATA MASTER
+    return [];
   },
 
   async addPlanting(planting: Planting): Promise<{ planting: Planting; tasks: TaskItem[]; syncedToSupabase: boolean; error?: string }> {
     const autoTasks = generateTasksForPlanting(planting);
 
     // 1. Simpan di Local Storage & IndexedDB
-    initLocalStorageIfEmpty();
-    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
-    plantings.unshift(planting);
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
-    idbSet(STORAGE_KEYS.PLANTINGS, plantings).catch(() => {});
+    try {
+      const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+      const plantings: Planting[] = rawPlantings ? JSON.parse(rawPlantings) : [];
+      plantings.unshift(planting);
+      localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(plantings));
+      idbSet(STORAGE_KEYS.PLANTINGS, plantings).catch(() => {});
 
-    const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
-    const tasks: TaskItem[] = rawTasks ? JSON.parse(rawTasks) : [];
-    const updatedTasks = [...autoTasks, ...tasks];
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(updatedTasks));
-    idbSet(STORAGE_KEYS.TASKS, updatedTasks).catch(() => {});
+      const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
+      const tasks: TaskItem[] = rawTasks ? JSON.parse(rawTasks) : [];
+      const updatedTasks = [...autoTasks, ...tasks];
+      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(updatedTasks));
+      idbSet(STORAGE_KEYS.TASKS, updatedTasks).catch(() => {});
+    } catch {}
 
     // 2. Simpan ke Supabase jika terhubung
     let synced = false;
@@ -484,13 +257,10 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Pastikan komoditas sudah ada di tabel public.crops agar foreign key tidak error
-        await ensureCropsInSupabase(supabase);
-
-        // Bersihkan objek untuk kompatibilitas skema Supabase
+        // Prepare payload
         const plantingPayload: any = {
           id: planting.id,
-          crop_id: planting.crop_id,
+          crop_id: planting.crop_id || null,
           crop_name: planting.crop_name,
           variety: planting.variety,
           plot_name: planting.plot_name,
@@ -503,13 +273,32 @@ export const FarmDB = {
           notes: planting.notes || ''
         };
 
+        // If crop_id is provided, try to ensure crops table accepts it or handle foreign key safely
+        if (plantingPayload.crop_id) {
+          try {
+            await supabase.from('crops').upsert([{
+              id: plantingPayload.crop_id,
+              name: plantingPayload.crop_name,
+              category: 'hortikultura'
+            }], { onConflict: 'id' });
+          } catch {}
+        }
+
         let { error: pErr } = await supabase.from('plantings').insert([plantingPayload]);
+        // If foreign key constraint failed, retry with crop_id: null
+        if (pErr && pErr.message && pErr.message.toLowerCase().includes('foreign key')) {
+          plantingPayload.crop_id = null;
+          const retry = await supabase.from('plantings').insert([plantingPayload]);
+          pErr = retry.error;
+        }
+        // If column error, remove optional scale columns
         if (pErr && pErr.message && pErr.message.toLowerCase().includes('column')) {
           delete plantingPayload.scale_quantity;
           delete plantingPayload.scale_unit;
           const retry = await supabase.from('plantings').insert([plantingPayload]);
           pErr = retry.error;
         }
+
         if (pErr) {
           console.error('Gagal simpan planting ke Supabase:', pErr);
           errMsg = pErr.message;
@@ -538,7 +327,7 @@ export const FarmDB = {
       }
     }
 
-    // 3. Simpan ke Server Backend (Tahan Hapus Chrome & Sinkron Semua Gawai)
+    // 3. Simpan ke Server Backend
     try {
       await fetch('/api/plantings', {
         method: 'POST',
@@ -548,7 +337,7 @@ export const FarmDB = {
     } catch {}
     invalidateServerCache();
 
-    // Broadcast Realtime Event ke seluruh perangkat yang sedang terbuka
+    // Broadcast Realtime Event
     broadcastRealtimeChange('plantings', 'INSERT', planting);
 
     return { planting, tasks: autoTasks, syncedToSupabase: synced, error: errMsg };
@@ -566,38 +355,37 @@ export const FarmDB = {
     invalidateServerCache();
 
     // 2. Hapus dari Local Storage & IndexedDB
-    const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
-    if (rawPlantings) {
-      const filtered = JSON.parse(rawPlantings).filter((p: Planting) => p.id !== plantingId);
-      localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.PLANTINGS, filtered).catch(() => {});
-    }
+    try {
+      const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
+      if (rawPlantings) {
+        const filtered = JSON.parse(rawPlantings).filter((p: Planting) => p.id !== plantingId);
+        localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.PLANTINGS, filtered).catch(() => {});
+      }
 
-    const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
-    if (rawTasks) {
-      const filtered = JSON.parse(rawTasks).filter((t: TaskItem) => t.planting_id !== plantingId);
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.TASKS, filtered).catch(() => {});
-    }
+      const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
+      if (rawTasks) {
+        const filtered = JSON.parse(rawTasks).filter((t: TaskItem) => t.planting_id !== plantingId);
+        localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.TASKS, filtered).catch(() => {});
+      }
 
-    const rawLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
-    if (rawLogs) {
-      const filtered = JSON.parse(rawLogs).filter((l: ActivityLog) => l.planting_id !== plantingId);
-      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
-    }
+      const rawLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
+      if (rawLogs) {
+        const filtered = JSON.parse(rawLogs).filter((l: ActivityLog) => l.planting_id !== plantingId);
+        localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
+      }
 
-    const rawExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-    if (rawExpenses) {
-      const filtered = JSON.parse(rawExpenses).filter((e: ExpenseRecord) => e.planting_id !== plantingId);
-      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
-    }
+      const rawExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+      if (rawExpenses) {
+        const filtered = JSON.parse(rawExpenses).filter((e: ExpenseRecord) => e.planting_id !== plantingId);
+        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
+      }
+    } catch {}
 
-    // Tandai bahwa aplikasi sudah pernah diinisialisasi agar tidak otomatis mengembalikan tanaman default
-    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
-
-    // 3. Hapus dari Supabase Master jika terhubung
+    // 3. Hapus dari Supabase Master
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -615,7 +403,7 @@ export const FarmDB = {
       }
     }
 
-    // Broadcast Realtime Delete Event ke perangkat lain
+    // Broadcast Realtime Delete Event
     broadcastRealtimeChange('plantings', 'DELETE', { id: plantingId });
 
     return { success: true };
@@ -648,33 +436,27 @@ export const FarmDB = {
 
     // 2. Server Backend Mirror
     const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
+    if (serverData && Array.isArray(serverData.tasks)) {
       if (plantingId && plantingId !== 'all') {
         return serverData.tasks.filter((t: any) => t.planting_id === plantingId);
       }
       return serverData.tasks;
     }
 
-    // 3. Fallback
-    await syncStorageFromIndexedDbIfEmpty();
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
-    let tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
-    if (tasks.length === 0) {
-      const master = generateDefaultMasterDataset();
-      tasks = master.tasks;
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
-      idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
-    }
+    // 3. Fallback Local Storage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
+      const tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
+      if (plantingId && plantingId !== 'all') {
+        return tasks.filter(t => t.planting_id === plantingId);
+      }
+      return tasks;
+    } catch {}
 
-    if (plantingId && plantingId !== 'all') {
-      return tasks.filter(t => t.planting_id === plantingId);
-    }
-    return tasks;
+    return [];
   },
 
   async toggleTaskCompletion(taskId: string, isCompleted: boolean, notes?: string): Promise<TaskItem | null> {
-    initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
     if (!raw) return null;
 
@@ -726,7 +508,6 @@ export const FarmDB = {
   },
 
   async addTask(task: TaskItem): Promise<{ task: TaskItem; syncedToSupabase: boolean; error?: string }> {
-    initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
     const tasks: TaskItem[] = raw ? JSON.parse(raw) : [];
     tasks.unshift(task);
@@ -747,8 +528,6 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        await ensurePlantingExistsInSupabase(supabase, task.planting_id);
-
         const payload = {
           id: task.id,
           planting_id: task.planting_id,
@@ -785,7 +564,6 @@ export const FarmDB = {
       fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).catch(() => {});
     } catch {}
 
-    initLocalStorageIfEmpty();
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
     if (raw) {
       const tasks: TaskItem[] = JSON.parse(raw);
@@ -810,7 +588,7 @@ export const FarmDB = {
     return { success: true };
   },
 
-  // --- Logs (Catatan Digital / Hama / Cuaca) ---
+  // --- Logs (Catatan Lapangan & Buku Harian) ---
   async getLogs(plantingId?: string): Promise<ActivityLog[]> {
     // 1. SUPABASE MASTER
     const supabase = getSupabaseClient();
@@ -837,39 +615,35 @@ export const FarmDB = {
 
     // 2. Server Backend Mirror
     const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.logs) && serverData.logs.length > 0) {
+    if (serverData && Array.isArray(serverData.logs)) {
       if (plantingId && plantingId !== 'all') {
         return serverData.logs.filter((l: any) => l.planting_id === plantingId);
       }
       return serverData.logs;
     }
 
-    // 3. Fallback
-    await syncStorageFromIndexedDbIfEmpty();
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
-    let logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
-    if (logs.length === 0) {
-      const master = generateDefaultMasterDataset();
-      logs = master.logs;
-      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
-      idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
-    }
+    // 3. Fallback Local Storage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
+      const logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
+      if (plantingId && plantingId !== 'all') {
+        return logs.filter(l => l.planting_id === plantingId);
+      }
+      return logs;
+    } catch {}
 
-    if (plantingId && plantingId !== 'all') {
-      return logs.filter(l => l.planting_id === plantingId);
-    }
-    return logs;
+    return [];
   },
 
   async addLog(log: ActivityLog): Promise<{ log: ActivityLog; syncedToSupabase: boolean; error?: string }> {
     // 1. Simpan di local storage & IndexedDB
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
-    const logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
-    logs.unshift(log);
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
-    idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
+      const logs: ActivityLog[] = raw ? JSON.parse(raw) : [];
+      logs.unshift(log);
+      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
+      idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
+    } catch {}
 
     // Simpan ke Server Backend
     try {
@@ -886,8 +660,6 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        await ensurePlantingExistsInSupabase(supabase, log.planting_id);
-
         const logPayload = {
           id: log.id,
           planting_id: log.planting_id,
@@ -926,28 +698,26 @@ export const FarmDB = {
     } catch {}
 
     // 1. Hapus dari local storage & IndexedDB
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
-    if (raw) {
-      const logs: ActivityLog[] = JSON.parse(raw);
-      const filtered = logs.filter(l => l.id !== logId);
-      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
-    }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.LOGS);
+      if (raw) {
+        const logs: ActivityLog[] = JSON.parse(raw);
+        const filtered = logs.filter(l => l.id !== logId);
+        localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.LOGS, filtered).catch(() => {});
+      }
+    } catch {}
 
     // 2. Hapus dari Supabase Master
-    let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
         const { error } = await supabase.from('activity_logs').delete().eq('id', logId);
         if (error) {
           console.error('Gagal hapus log di Supabase:', error);
-          errMsg = error.message;
-          return { success: false, error: errMsg };
+          return { success: false, error: error.message };
         }
       } catch (err: any) {
-        console.error('Exception saat delete log Supabase:', err);
         return { success: false, error: err?.message };
       }
     }
@@ -985,39 +755,35 @@ export const FarmDB = {
 
     // 2. Server Backend Mirror
     const serverData = await fetchServerData();
-    if (serverData && Array.isArray(serverData.expenses) && serverData.expenses.length > 0) {
+    if (serverData && Array.isArray(serverData.expenses)) {
       if (plantingId && plantingId !== 'all') {
         return serverData.expenses.filter((e: any) => e.planting_id === plantingId);
       }
       return serverData.expenses;
     }
 
-    // 3. Fallback
-    await syncStorageFromIndexedDbIfEmpty();
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-    let expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
-    if (expenses.length === 0) {
-      const master = generateDefaultMasterDataset();
-      expenses = master.expenses;
-      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
-      idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
-    }
+    // 3. Fallback Local Storage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+      const expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
+      if (plantingId && plantingId !== 'all') {
+        return expenses.filter(e => e.planting_id === plantingId);
+      }
+      return expenses;
+    } catch {}
 
-    if (plantingId && plantingId !== 'all') {
-      return expenses.filter(e => e.planting_id === plantingId);
-    }
-    return expenses;
+    return [];
   },
 
   async addExpense(expense: ExpenseRecord): Promise<{ expense: ExpenseRecord; syncedToSupabase: boolean; error?: string }> {
     // 1. Simpan di local storage & IndexedDB
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-    const expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
-    expenses.unshift(expense);
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
-    idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+      const expenses: ExpenseRecord[] = raw ? JSON.parse(raw) : [];
+      expenses.unshift(expense);
+      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+      idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
+    } catch {}
 
     // Simpan ke Server Backend
     try {
@@ -1034,8 +800,6 @@ export const FarmDB = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        await ensurePlantingExistsInSupabase(supabase, expense.planting_id);
-
         const expensePayload = {
           id: expense.id,
           planting_id: expense.planting_id,
@@ -1072,28 +836,26 @@ export const FarmDB = {
     } catch {}
 
     // 1. Hapus dari local storage & IndexedDB
-    initLocalStorageIfEmpty();
-    const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-    if (raw) {
-      const expenses: ExpenseRecord[] = JSON.parse(raw);
-      const filtered = expenses.filter(e => e.id !== expenseId);
-      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
-      idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
-    }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+      if (raw) {
+        const expenses: ExpenseRecord[] = JSON.parse(raw);
+        const filtered = expenses.filter(e => e.id !== expenseId);
+        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(filtered));
+        idbSet(STORAGE_KEYS.EXPENSES, filtered).catch(() => {});
+      }
+    } catch {}
 
     // 2. Hapus dari Supabase Master
-    let errMsg = undefined;
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
         const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
         if (error) {
           console.error('Gagal hapus expense di Supabase:', error);
-          errMsg = error.message;
-          return { success: false, error: errMsg };
+          return { success: false, error: error.message };
         }
       } catch (err: any) {
-        console.error('Exception saat delete expense Supabase:', err);
         return { success: false, error: err?.message };
       }
     }
@@ -1112,7 +874,6 @@ export const FarmDB = {
     }
 
     try {
-      initLocalStorageIfEmpty();
       const rawPlantings = localStorage.getItem(STORAGE_KEYS.PLANTINGS);
       const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
       const rawLogs = localStorage.getItem(STORAGE_KEYS.LOGS);
@@ -1123,14 +884,11 @@ export const FarmDB = {
       const logs: ActivityLog[] = rawLogs ? JSON.parse(rawLogs) : [];
       const expenses: ExpenseRecord[] = rawExpenses ? JSON.parse(rawExpenses) : [];
 
-      // 0. Pastikan katalog crops diisi terlebih dahulu untuk mencegah pelanggaran Foreign Key
-      await ensureCropsInSupabase(supabase);
-
       // 1. Sync Plantings
       if (plantings.length > 0) {
         const pPayloads = plantings.map(p => ({
           id: p.id,
-          crop_id: p.crop_id,
+          crop_id: p.crop_id || null,
           crop_name: p.crop_name,
           variety: p.variety,
           plot_name: p.plot_name,
@@ -1210,7 +968,7 @@ export const FarmDB = {
 
       return {
         success: true,
-        message: 'Seluruh data lahan, jadwal, catatan, dan biaya operasional berhasil disinkronisasikan ke Supabase!',
+        message: 'Seluruh data berhasil disinkronisasikan ke Supabase!',
         count: {
           plantings: plantings.length,
           tasks: tasks.length,
@@ -1226,6 +984,19 @@ export const FarmDB = {
         count: { plantings: 0, tasks: 0, logs: 0, expenses: 0 }
       };
     }
+  },
+
+  // Clear cache and force re-fetch directly from Supabase
+  async clearLocalCacheAndReload(): Promise<void> {
+    invalidateServerCache();
+    localStorage.removeItem(STORAGE_KEYS.PLANTINGS);
+    localStorage.removeItem(STORAGE_KEYS.TASKS);
+    localStorage.removeItem(STORAGE_KEYS.LOGS);
+    localStorage.removeItem(STORAGE_KEYS.EXPENSES);
+    idbSet(STORAGE_KEYS.PLANTINGS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.TASKS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.LOGS, []).catch(() => {});
+    idbSet(STORAGE_KEYS.EXPENSES, []).catch(() => {});
   },
 
   async clearAllData(): Promise<{ success: boolean; error?: string }> {
@@ -1259,58 +1030,7 @@ export const FarmDB = {
     return { success: true };
   },
 
-  async restoreMasterData(): Promise<{ success: boolean; message: string; data?: any }> {
-    try {
-      const res = await fetch('/api/data/restore-defaults', { method: 'POST' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data) {
-          localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(json.data.plantings || []));
-          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks || []));
-          localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(json.data.logs || []));
-          localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(json.data.expenses || []));
-          idbSet(STORAGE_KEYS.PLANTINGS, json.data.plantings || []).catch(() => {});
-          idbSet(STORAGE_KEYS.TASKS, json.data.tasks || []).catch(() => {});
-          idbSet(STORAGE_KEYS.LOGS, json.data.logs || []).catch(() => {});
-          idbSet(STORAGE_KEYS.EXPENSES, json.data.expenses || []).catch(() => {});
-          serverDataCache = json.data;
-          const supabase = getSupabaseClient();
-          if (supabase) {
-            await FarmDB.syncAllLocalToSupabase();
-          }
-          return {
-            success: true,
-            message: 'Data master pertanian (Padi Inpari 32, Jagung Hibrida, Cabai Rawit) beserta jadwal SOP lengkap berhasil dipulihkan!',
-            data: json.data
-          };
-        }
-      }
-    } catch {}
-
-    // Fallback locally
-    const master = generateDefaultMasterDataset();
-    localStorage.setItem(STORAGE_KEYS.PLANTINGS, JSON.stringify(master.plantings));
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(master.tasks));
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(master.logs));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(master.expenses));
-    idbSet(STORAGE_KEYS.PLANTINGS, master.plantings).catch(() => {});
-    idbSet(STORAGE_KEYS.TASKS, master.tasks).catch(() => {});
-    idbSet(STORAGE_KEYS.LOGS, master.logs).catch(() => {});
-    idbSet(STORAGE_KEYS.EXPENSES, master.expenses).catch(() => {});
-    serverDataCache = master;
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      await FarmDB.syncAllLocalToSupabase();
-    }
-    return {
-      success: true,
-      message: 'Data master pertanian berhasil dipulihkan di memori gawai!',
-      data: master
-    };
-  },
-
   async exportAllData(): Promise<string> {
-    initLocalStorageIfEmpty();
     const plantings = JSON.parse(localStorage.getItem(STORAGE_KEYS.PLANTINGS) || '[]');
     const tasks = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) || '[]');
     const logs = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS) || '[]');
@@ -1318,7 +1038,7 @@ export const FarmDB = {
 
     const backup = {
       app: 'TaniGuide',
-      version: '3.0',
+      version: '4.0',
       exportedAt: new Date().toISOString(),
       plantings,
       tasks,
@@ -1344,14 +1064,12 @@ export const FarmDB = {
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
-      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
 
       idbSet(STORAGE_KEYS.PLANTINGS, plantings).catch(() => {});
       idbSet(STORAGE_KEYS.TASKS, tasks).catch(() => {});
       idbSet(STORAGE_KEYS.LOGS, logs).catch(() => {});
       idbSet(STORAGE_KEYS.EXPENSES, expenses).catch(() => {});
 
-      // Jika Supabase terhubung, otomatis unggah ke cloud
       const supabase = getSupabaseClient();
       if (supabase) {
         await FarmDB.syncAllLocalToSupabase();

@@ -99,289 +99,33 @@ function addDays(dateStr: string, days: number): string {
   return formatDate(d);
 }
 
-// Generate rich master Indonesian farm dataset (Padi, Jagung, Cabai)
-function getMasterSeedData() {
-  const today = new Date();
-  const todayStr = formatDate(today);
-
-  // Plot 1: Jagung Hibrida (HST 14)
-  const jagungPlantDate = new Date(today);
-  jagungPlantDate.setDate(jagungPlantDate.getDate() - 14);
-  const jagungPlantStr = formatDate(jagungPlantDate);
-  const jagungHarvestStr = addDays(jagungPlantStr, 100);
-  const plot1Id = generateUUID();
-
-  const plot1 = {
-    id: plot1Id,
-    crop_id: 'jagung',
-    crop_name: 'Jagung Hibrida / Manis',
-    variety: 'NK 212',
-    plot_name: 'Lahan Barat (Petak A)',
-    area_sqm: 2500,
-    scale_quantity: 2500,
-    scale_unit: 'm2',
-    planting_date: jagungPlantStr,
-    estimated_harvest_date: jagungHarvestStr,
-    status: 'active',
-    notes: 'Jarak tanam 70x20 cm, pupuk dasar kompos kandang 500 kg.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 2: Cabai Rawit (HST 28 - Skala 500 Pohon)
-  const cabaiPlantDate = new Date(today);
-  cabaiPlantDate.setDate(cabaiPlantDate.getDate() - 28);
-  const cabaiPlantStr = formatDate(cabaiPlantDate);
-  const cabaiHarvestStr = addDays(cabaiPlantStr, 85);
-  const plot2Id = generateUUID();
-
-  const plot2 = {
-    id: plot2Id,
-    crop_id: 'cabai',
-    crop_name: 'Cabai Rawit / Merah',
-    variety: 'Ori 212',
-    plot_name: 'Kebun Mulsa Blok B (500 Pohon)',
-    area_sqm: 1200,
-    scale_quantity: 500,
-    scale_unit: 'pohon',
-    planting_date: cabaiPlantStr,
-    estimated_harvest_date: cabaiHarvestStr,
-    status: 'active',
-    notes: '500 pohon bedengan mulsa perak, pengocoran NPK & kalsium rutin.',
-    created_at: new Date().toISOString()
-  };
-
-  // Plot 3: Padi Sawah (HST 45 - 0.5 Hektar)
-  const padiPlantDate = new Date(today);
-  padiPlantDate.setDate(padiPlantDate.getDate() - 45);
-  const padiPlantStr = formatDate(padiPlantDate);
-  const padiHarvestStr = addDays(padiPlantStr, 110);
-  const plot3Id = generateUUID();
-
-  const plot3 = {
-    id: plot3Id,
-    crop_id: 'padi',
-    crop_name: 'Padi Sawah',
-    variety: 'Inpari 32',
-    plot_name: 'Sawah Irigasi Desa C (0.5 Ha)',
-    area_sqm: 5000,
-    scale_quantity: 0.5,
-    scale_unit: 'hektar',
-    planting_date: padiPlantStr,
-    estimated_harvest_date: padiHarvestStr,
-    status: 'active',
-    notes: 'Sistem jajar legowo 2:1, irigasi macak-macak berselang.',
-    created_at: new Date().toISOString()
-  };
-
-  // Sample tasks for Jagung
-  const tasks = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      title: 'Tanam Benih & Aplikasi Furadan Antar Lubang',
-      category: 'perawatan',
-      hst: 0,
-      due_date: addDays(jagungPlantStr, 0),
-      dosage: 'Benih 20 kg/ha, Furadan 10 kg/ha',
-      description: 'Tanam 1-2 biji per lubang jarak 70x20 cm',
-      priority: 'high',
-      is_completed: true,
-      completed_at: addDays(jagungPlantStr, 0),
-      completion_notes: 'Selesai serentak'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      title: 'Pemupukan Susulan I (NPK Phonska & Urea)',
-      category: 'pemupukan',
-      hst: 14,
-      due_date: addDays(jagungPlantStr, 14),
-      dosage: 'Urea 100 kg/ha + NPK 150 kg/ha (jarak 7 cm dari batang)',
-      description: 'Tugal pupuk di samping tanaman lalu tutup tanah gembur',
-      priority: 'high',
-      is_completed: false,
-      completed_at: null,
-      completion_notes: ''
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      title: 'Penyiangan Gulma & Pembumbunan Tanah',
-      category: 'penyiangan',
-      hst: 28,
-      due_date: addDays(jagungPlantStr, 28),
-      dosage: 'Manual cangkul dangkal',
-      description: 'Naikkan tanah ke pangkal batang jagung agar akar kokoh',
-      priority: 'medium',
-      is_completed: false,
-      completed_at: null,
-      completion_notes: ''
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      title: 'Pemupukan Susulan II (Fase Primordia Tongkol)',
-      category: 'pemupukan',
-      hst: 35,
-      due_date: addDays(jagungPlantStr, 35),
-      dosage: 'Urea 150 kg/ha + KCL 50 kg/ha',
-      description: 'Dorong pembentukan tongkol jagung berbobot',
-      priority: 'high',
-      is_completed: false,
-      completed_at: null,
-      completion_notes: ''
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      title: 'Panen Raya Jagung Pipil Kering',
-      category: 'panen',
-      hst: 100,
-      due_date: addDays(jagungPlantStr, 100),
-      dosage: 'Target kadar air 15%',
-      description: 'Kelobot telah mengering kecokelatan sempurna',
-      priority: 'high',
-      is_completed: false,
-      completed_at: null,
-      completion_notes: ''
-    },
-    // Tasks for Cabai
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      title: 'Pengocoran Pupuk NPK Daun & Kalsium',
-      category: 'pemupukan',
-      hst: 28,
-      due_date: addDays(cabaiPlantStr, 28),
-      dosage: 'NPK 16-16-16 (3 gram/liter air, kocor 200ml per lubang)',
-      description: 'Kocor sore hari saat tanah lembap',
-      priority: 'high',
-      is_completed: false,
-      completed_at: null,
-      completion_notes: ''
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      title: 'Pemasangan Ajir Bambu & Tali Pengikat',
-      category: 'perawatan',
-      hst: 21,
-      due_date: addDays(cabaiPlantStr, 21),
-      dosage: 'Tinggi ajir 120-150 cm',
-      description: 'Tancapkan bambu miring dan ikat batang dengan tali salaran',
-      priority: 'medium',
-      is_completed: true,
-      completed_at: addDays(cabaiPlantStr, 21),
-      completion_notes: 'Sudah diikat rapi'
-    },
-    // Tasks for Padi
-    {
-      id: generateUUID(),
-      planting_id: plot3Id,
-      title: 'Pemupukan Susulan II (Fase Anakan Maksimum)',
-      category: 'pemupukan',
-      hst: 42,
-      due_date: addDays(padiPlantStr, 42),
-      dosage: 'Urea 75 kg/ha + NPK 100 kg/ha',
-      description: 'Sebar merata kondisi sawah macak-macak',
-      priority: 'high',
-      is_completed: true,
-      completed_at: addDays(padiPlantStr, 42),
-      completion_notes: 'Anakan padi tumbuh lebat'
-    }
-  ];
-
-  const logs = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: todayStr,
-      type: 'catatan_lapangan',
-      title: 'Tinggi tanaman jagung rata-rata 40 cm',
-      notes: 'Batang hijau sehat, daun kokoh setelah pemupukan susulan pertama.',
-      weather_condition: 'cerah',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: addDays(todayStr, -2),
-      type: 'hama_penyakit',
-      title: 'Pantau serangga thrips & kutu kebul',
-      notes: 'Pucuk daun aman, daun muda tidak ada keriting.',
-      weather_condition: 'berawan',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot3Id,
-      date: addDays(todayStr, -4),
-      type: 'cuaca',
-      title: 'Pengairan berselang pintu air sawah',
-      notes: 'Air sawah dikeringkan selama 3 hari untuk merangsang akar padi mendalam.',
-      weather_condition: 'cerah',
-      cost_amount: 0,
-      harvest_yield_kg: 0
-    }
-  ];
-
-  const expenses = [
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: jagungPlantStr,
-      category: 'benih',
-      item_name: 'Benih Jagung Hibrida NK 212 (5 kg)',
-      amount: 475000,
-      notes: 'Toko Tani Makmur Sejahtera'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot1Id,
-      date: addDays(jagungPlantStr, 14),
-      category: 'pupuk',
-      item_name: 'Pupuk NPK Phonska & Urea (2 Karung)',
-      amount: 320000,
-      notes: 'Pemupukan susulan 1'
-    },
-    {
-      id: generateUUID(),
-      planting_id: plot2Id,
-      date: cabaiPlantStr,
-      category: 'peralatan',
-      item_name: 'Mulsa Plastik Hitam Perak & Ajir Bambu',
-      amount: 650000,
-      notes: 'Kebutuhan bedengan kebun cabai'
-    }
-  ];
-
-  return {
-    plantings: [plot1, plot2, plot3],
-    tasks,
-    logs,
-    expenses,
-    updated_at: new Date().toISOString()
-  };
-}
-
 // Read database from disk
 function readDatabase() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const data = JSON.parse(content);
-      if (data && Array.isArray(data.plantings) && data.plantings.length > 0) {
-        return data;
+      if (data && typeof data === 'object') {
+        return {
+          plantings: Array.isArray(data.plantings) ? data.plantings : [],
+          tasks: Array.isArray(data.tasks) ? data.tasks : [],
+          logs: Array.isArray(data.logs) ? data.logs : [],
+          expenses: Array.isArray(data.expenses) ? data.expenses : [],
+          updated_at: data.updated_at || new Date().toISOString()
+        };
       }
     }
   } catch (err) {
     console.error('Error reading database file:', err);
   }
 
-  // If file doesn't exist or is invalid, seed with master data
-  const initial = getMasterSeedData();
+  const initial = {
+    plantings: [],
+    tasks: [],
+    logs: [],
+    expenses: [],
+    updated_at: new Date().toISOString()
+  };
   writeDatabase(initial);
   return initial;
 }
@@ -431,17 +175,6 @@ app.get('/api/data', (_req, res) => {
     success: true,
     data: db,
     server_time: new Date().toISOString()
-  });
-});
-
-// RESTORE master data
-app.post('/api/data/restore-defaults', (_req, res) => {
-  const master = getMasterSeedData();
-  writeDatabase(master);
-  res.json({
-    success: true,
-    message: 'Data master pertanian (Padi, Jagung, Cabai) berhasil dipulihkan!',
-    data: master
   });
 });
 
@@ -742,7 +475,7 @@ async function generateGeminiContent(params: {
 }) {
   if (!ai) throw new Error('GEMINI_API_KEY belum dikonfigurasi di server.');
 
-  const models = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -753,11 +486,17 @@ async function generateGeminiContent(params: {
       if (params.topP !== undefined) config.topP = params.topP;
       if (params.responseMimeType) config.responseMimeType = params.responseMimeType;
 
-      const response = await ai.models.generateContent({
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout calling Gemini model')), 4500)
+      );
+
+      const generatePromise = ai.models.generateContent({
         model,
         contents: params.contents,
         config
       });
+
+      const response = await Promise.race([generatePromise, timeoutPromise]) as any;
       return response;
     } catch (err: any) {
       lastError = err;

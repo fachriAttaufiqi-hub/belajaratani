@@ -9,11 +9,7 @@ import {
   BookOpenText, 
   Layers, 
   ChevronDown,
-  CheckCircle2,
-  AlertCircle,
-  RotateCcw,
-  Bot,
-  Sparkles
+  Bot
 } from 'lucide-react';
 import { Planting } from '../types';
 
@@ -21,14 +17,13 @@ interface NavbarProps {
   plantings: Planting[];
   selectedPlotId: string;
   onSelectPlot: (plotId: string) => void;
-  activeTab: 'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant';
-  onSelectTab: (tab: 'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant') => void;
+  activeTab: 'dashboard' | 'schedule' | 'logs' | 'assistant';
+  onSelectTab: (tab: 'dashboard' | 'schedule' | 'logs' | 'assistant') => void;
   onOpenNewPlanting: () => void;
   onOpenSupabaseModal: () => void;
   onOpenFertilizerCalc: () => void;
   onOpenManagePlots?: () => void;
   isSupabaseConnected: boolean;
-  onRestoreMasterData?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -41,8 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSupabaseModal,
   onOpenFertilizerCalc,
   onOpenManagePlots,
-  isSupabaseConnected,
-  onRestoreMasterData
+  isSupabaseConnected
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
@@ -137,26 +131,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden md:inline">Hitung Pupuk</span>
             </button>
 
-            {/* Quick Restore Button (visible if plantings is empty) */}
-            {plantings.length === 0 && onRestoreMasterData && (
-              <button
-                onClick={onRestoreMasterData}
-                title="Pulihkan data pertanian master lengkap"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer animate-pulse transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Pulihkan Data</span>
-                <span className="sm:hidden">Pulihkan</span>
-              </button>
-            )}
-
             {/* Add New Planting Button */}
             <button
               onClick={onOpenNewPlanting}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-700/20 active:scale-95 transition"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-700/20 active:scale-95 transition cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">Tambah Tanam</span>
+              <span className="hidden sm:inline">Tambah Lahan</span>
               <span className="sm:hidden">Tanam</span>
             </button>
           </div>
@@ -166,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav className="flex space-x-1 sm:space-x-4 border-t border-stone-100 pt-1 pb-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => onSelectTab('dashboard')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'dashboard'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
@@ -178,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => onSelectTab('schedule')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'schedule'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
@@ -190,31 +171,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => onSelectTab('logs')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'logs'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
             }`}
           >
             <BookOpenText className="w-4 h-4" />
-            <span>Buku Catatan & Biaya</span>
-          </button>
-
-          <button
-            onClick={() => onSelectTab('guide')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
-              activeTab === 'guide'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Katalog & Panduan SOP</span>
+            <span>Catatan & Biaya</span>
           </button>
 
           <button
             onClick={() => onSelectTab('assistant')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'assistant'
                 ? 'bg-linear-to-r from-emerald-600 to-teal-700 text-white shadow-sm ring-2 ring-emerald-400/40'
                 : 'text-emerald-800 hover:text-emerald-950 bg-emerald-50/80 hover:bg-emerald-100/80 border border-emerald-200/80'

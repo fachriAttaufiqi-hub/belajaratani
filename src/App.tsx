@@ -3,7 +3,6 @@ import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { ScheduleView } from './components/ScheduleView';
 import { FarmLogView } from './components/FarmLogView';
-import { GuideView } from './components/GuideView';
 import { NewPlantingModal } from './components/NewPlantingModal';
 import { FertilizerCalcModal } from './components/FertilizerCalcModal';
 import { SupabaseModal } from './components/SupabaseModal';
@@ -20,7 +19,7 @@ export default function App() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [selectedPlotId, setSelectedPlotId] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'logs' | 'guide' | 'assistant'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'logs' | 'assistant'>('dashboard');
 
   // Modals
   const [isNewPlantingOpen, setIsNewPlantingOpen] = useState<boolean>(false);
@@ -28,6 +27,7 @@ export default function App() {
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [isManagePlotsOpen, setIsManagePlotsOpen] = useState<boolean>(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [appToast, setAppToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
   const showAppToast = (message: string, type: 'success' | 'warning' | 'error' = 'success') => {
@@ -199,20 +199,13 @@ export default function App() {
     return res;
   };
 
-  // Handle restoring master farm dataset (Padi, Jagung, Cabai)
-  const handleRestoreMasterData = async () => {
-    const res = await FarmDB.restoreMasterData();
-    if (res.success) {
-      await loadData();
-      showAppToast(res.message, 'success');
-    } else {
-      showAppToast('Gagal memulihkan data', 'error');
-    }
-  };
-
-  // Guide: quick start planting with specific crop
-  const handleStartPlantingWithCrop = (cropId: string) => {
-    setIsNewPlantingOpen(true);
+  // Handle refresh and cache purge from Supabase
+  const handleRefreshFromSupabase = async () => {
+    setIsRefreshing(true);
+    await FarmDB.clearLocalCacheAndReload();
+    await loadData();
+    setIsRefreshing(false);
+    showAppToast('Data berhasil disegarkan langsung dari Supabase!', 'success');
   };
 
   const handleQuickExportBackup = async () => {
@@ -245,7 +238,6 @@ export default function App() {
         onOpenFertilizerCalc={() => setIsFertilizerCalcOpen(true)}
         onOpenManagePlots={() => setIsManagePlotsOpen(true)}
         isSupabaseConnected={isSupabaseConnected}
-        onRestoreMasterData={handleRestoreMasterData}
       />
 
       {/* Main Content Area */}
@@ -309,6 +301,16 @@ export default function App() {
 
             <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
               <button
+                onClick={handleRefreshFromSupabase}
+                disabled={isRefreshing}
+                title="Hapus cache lokal & muat ulang data dari Supabase"
+                className="px-3.5 py-2.5 rounded-xl font-bold text-xs bg-emerald-600/70 hover:bg-emerald-600 text-white border border-emerald-400/50 flex items-center gap-1.5 cursor-pointer transition shadow-2xs active:scale-95 disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Menyinkronkan...' : 'Segarkan Supabase'}</span>
+              </button>
+
+              <button
                 onClick={() => setIsSupabaseModalOpen(true)}
                 className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 cursor-pointer shadow-md transition active:scale-95 ${
                   isSupabaseConnected
@@ -346,7 +348,6 @@ export default function App() {
             onOpenNewPlanting={() => setIsNewPlantingOpen(true)}
             onDeletePlanting={handleDeletePlanting}
             onOpenManagePlots={() => setIsManagePlotsOpen(true)}
-            onRestoreMasterData={handleRestoreMasterData}
           />
         )}
 
@@ -376,13 +377,6 @@ export default function App() {
             onDeleteLog={handleDeleteLog}
             onAddExpense={handleAddExpense}
             onDeleteExpense={handleDeleteExpense}
-          />
-        )}
-
-        {activeTab === 'guide' && (
-          <GuideView
-            onStartPlantingWithCrop={handleStartPlantingWithCrop}
-            onOpenFertilizerCalc={() => setIsFertilizerCalcOpen(true)}
           />
         )}
 
@@ -467,7 +461,6 @@ export default function App() {
           setSelectedPlotId(plotId);
           setActiveTab('schedule');
         }}
-        onRestoreMasterData={handleRestoreMasterData}
       />
 
       <FertilizerCalcModal

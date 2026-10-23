@@ -8,8 +8,8 @@ const STORAGE_KEY_KEY = 'taniguide_supabase_key';
 // MASUKKAN KREDENSIAL SUPABASE ANDA DI SINI
 // Kunci ini akan terkunci secara permanen di seluruh gawai/browser.
 // ============================================================================
-export const DEFAULT_SUPABASE_URL = 'https://proyek-anda.supabase.co'; // <--- Masukkan URL Supabase Anda
-export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // <--- Masukkan Anon Key Anda
+export const DEFAULT_SUPABASE_URL = 'https://lactbjretztoutwerjsm.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhY3RianJldHp0b3V0d2VyanNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MDcyODIsImV4cCI6MjEwNjA4MzI4Mn0.17a2SBU4yKSxChyLIAOUwDJAYxqCM2ONTCryI8xex-o';
 
 let inMemoryUrl = '';
 let inMemoryKey = '';
