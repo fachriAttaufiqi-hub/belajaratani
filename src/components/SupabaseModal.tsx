@@ -20,11 +20,15 @@ import {
   Radio,
   FileJson,
   UploadCloud,
-  RotateCcw
+  RotateCcw,
+  Sparkles,
+  ExternalLink,
+  Cpu
 } from 'lucide-react';
 import { SUPABASE_SQL_DDL } from '../lib/sqlSchema';
 import { getSavedSupabaseConfig, saveSupabaseConfig, testSupabaseConnection, generateSyncShareUrl } from '../lib/supabase';
 import { FarmDB } from '../lib/storage';
+import { getStoredGeminiKey, saveStoredGeminiKey, isStaticOrGitHubPages } from '../lib/geminiKey';
 
 interface SupabaseModalProps {
   isOpen: boolean;
@@ -40,12 +44,21 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   const currentConfig = getSavedSupabaseConfig();
   const [url, setUrl] = useState<string>(currentConfig.url);
   const [key, setKey] = useState<string>(currentConfig.key);
-  const [activeTab, setActiveTab] = useState<'config' | 'sync_device' | 'sql' | 'architecture'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'api_ai' | 'sync_device' | 'sql' | 'architecture'>('config');
   const [testing, setTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [geminiKeyInput, setGeminiKeyInput] = useState<string>(() => getStoredGeminiKey());
+  const [geminiKeySaved, setGeminiKeySaved] = useState<boolean>(false);
+
+  const handleSaveGeminiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveStoredGeminiKey(geminiKeyInput);
+    setGeminiKeySaved(true);
+    setTimeout(() => setGeminiKeySaved(false), 2500);
+  };
 
   // Sync state
   const [syncing, setSyncing] = useState<boolean>(false);
@@ -202,6 +215,19 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
             <Lock className="w-4 h-4 text-emerald-600" />
             <span>Kunci Supabase Master</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">Utama</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('api_ai')}
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'api_ai'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            <span>Kunci API Asisten AI</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">GitHub Pages</span>
           </button>
 
           <button
@@ -383,6 +409,91 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                   </div>
                 </div>
               )}
+            </form>
+          )}
+
+          {/* TAB: KUNCI API ASISTEN AI (GEMINI) */}
+          {activeTab === 'api_ai' && (
+            <form onSubmit={handleSaveGeminiKey} className="space-y-4">
+              <div className="p-4 sm:p-5 rounded-2xl border bg-linear-to-r from-emerald-950 to-teal-950 border-emerald-700/50 text-white space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-emerald-300" />
+                    <span className="font-extrabold text-sm sm:text-base">Pengaturan Kunci API Asisten AI</span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    geminiKeyInput.trim()
+                      ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
+                      : 'bg-amber-500/20 text-amber-200 border-amber-400/30'
+                  }`}>
+                    {geminiKeyInput.trim() ? 'Kunci Klien Tersimpan' : 'Mode Agronomi Bawaan'}
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100/90 leading-relaxed">
+                  <strong>Khusus GitHub Pages (Hosting Statis):</strong> Karena GitHub Pages berjalan tanpa server Node.js di latar belakang, masukkan API Key Google Gemini gratis Anda di bawah agar Asisten AI dapat berpikir secara live. Jika dikosongkan, Asisten AI tetap 100% aktif menggunakan <strong>Mesin Pakar Agronomi Cerdas bawaan</strong> secara offline.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-emerald-600" />
+                    Google Gemini API Key
+                  </span>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 text-[11px]"
+                  >
+                    <span>Dapatkan API Key Gratis</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </label>
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={geminiKeyInput}
+                  onChange={(e) => setGeminiKeyInput(e.target.value)}
+                  className="w-full text-xs sm:text-sm font-mono rounded-xl border border-stone-300 p-3 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden bg-stone-50/50"
+                />
+                <p className="text-[11px] text-stone-500 mt-1">
+                  Kunci API ini disimpan secara aman dan lokal hanya di browser (localStorage) perangkat Anda.
+                </p>
+              </div>
+
+              {geminiKeySaved && (
+                <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-700" />
+                  <span>Kunci API Asisten AI berhasil diperbarui!</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                {geminiKeyInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeminiKeyInput('');
+                      saveStoredGeminiKey('');
+                      setGeminiKeySaved(true);
+                      setTimeout(() => setGeminiKeySaved(false), 2000);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-rose-700 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Kunci</span>
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  className="ml-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Simpan Kunci API AI</span>
+                </button>
+              </div>
             </form>
           )}
 

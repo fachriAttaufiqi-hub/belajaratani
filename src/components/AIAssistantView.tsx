@@ -22,12 +22,15 @@ import {
   Trees,
   CheckCircle2,
   CalendarCheck2,
-  ShieldCheck
+  ShieldCheck,
+  Key
 } from 'lucide-react';
 import { Planting, TaskItem } from '../types';
 import { calculateHST, formatDate, addDays, generateUUID } from '../lib/storage';
 import { formatPlantingScale } from '../lib/scaleUnits';
 import { sendAIChatMessage, generateAITasks, ChatMessage, GeneratedAITask } from '../lib/aiAssistant';
+import { GeminiApiKeyModal } from './GeminiApiKeyModal';
+import { hasStoredGeminiKey, isStaticOrGitHubPages } from '../lib/geminiKey';
 
 interface AIAssistantViewProps {
   plantings: Planting[];
@@ -51,12 +54,17 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // AI Task Generator Modal State
+  // AI Task Generator & API Key Modal State
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [keyRefresh, setKeyRefresh] = useState<number>(0);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState<boolean>(false);
   const [isGeneratingTasks, setIsGeneratingTasks] = useState<boolean>(false);
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedAITask[]>([]);
   const [addedTaskIndices, setAddedTaskIndices] = useState<number[]>([]);
   const [generatorSuccessMessage, setGeneratorSuccessMessage] = useState<string | null>(null);
+
+  const clientHasKey = useMemo(() => hasStoredGeminiKey(), [keyRefresh]);
+  const isStatic = useMemo(() => isStaticOrGitHubPages(), []);
 
   const activePlot = useMemo(() => {
     if (activePlotId === 'all') return null;
@@ -309,12 +317,17 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-300 animate-pulse" />
-                <span>Asisten AI Agronomi Indonesia • Gemini Flash Aktif</span>
+                <span>Asisten AI Agronomi Indonesia • {clientHasKey ? 'Gemini Direct Klien' : isStatic ? 'Mode Agronomi Cerdas (Statis)' : 'Gemini Flash Aktif'}</span>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-emerald-100 text-[11px] font-medium border border-white/15">
-                <ShieldCheck className="w-3 h-3 text-emerald-300" />
-                <span>API Gemini Terhubung di Server</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsApiKeyModalOpen(true)}
+                title="Klik untuk membuka Pengaturan Kunci API Gemini"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-emerald-100 text-[11px] font-medium border border-white/15 cursor-pointer transition active:scale-95"
+              >
+                <Key className="w-3 h-3 text-emerald-300" />
+                <span>{clientHasKey ? 'Kunci API Kustom Tersimpan' : isStatic ? 'GitHub Pages (Atur API)' : 'API Terhubung di Server'}</span>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
               Asisten Jadwal & Perawatan Tanaman 🤖
@@ -325,6 +338,16 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsApiKeyModalOpen(true)}
+              title="Atur Kunci API Google Gemini (Bekerja di GitHub Pages)"
+              className="px-3.5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-xs transition active:scale-95 flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <Key className="w-4 h-4 text-emerald-300" />
+              <span>Atur API Key</span>
+            </button>
+
             {activePlot && (
               <button
                 type="button"
@@ -783,6 +806,13 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Gemini API Key Configuration Modal for GitHub Pages & Static Hosts */}
+      <GeminiApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onKeySaved={() => setKeyRefresh(k => k + 1)}
+      />
 
     </div>
   );
