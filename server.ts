@@ -16,16 +16,7 @@ app.use(express.json());
 
 // Initialize Google Gemini AI client
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
-const ai = geminiApiKey
-  ? new GoogleGenAI({
-      apiKey: geminiApiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    })
-  : null;
+const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 // Persistent Data Storage Path & Locked Supabase Config
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -363,24 +354,66 @@ function normalizeGeminiContents(history: any[], currentMessage: string) {
 
 // Fallback cerdas agronomi Indonesia bila API model mengalami lonjakan antrean
 function generateAgronomyFallbackReply(message: string, plotContext?: any): string {
+  const lowerMsg = (message || '').toLowerCase();
   const crop = (plotContext?.crop_name || 'tanaman budidaya').toLowerCase();
-  const hst = plotContext?.hst !== undefined ? plotContext.hst : 15;
-  const scale = plotContext?.scale_quantity ? `${plotContext.scale_quantity} ${plotContext.scale_unit || 'pohon'}` : 'skala kebun';
+  const hst = plotContext?.hst !== undefined ? plotContext.hst : 18;
+  const scale = plotContext?.scale_quantity ? `${plotContext.scale_quantity} ${plotContext.scale_unit || 'pohon'}` : 'skala lahan';
 
+  // 1. Kasus Tanaman Gosong / Overdosis Pupuk (Fertilizer Burn)
+  if (lowerMsg.includes('gosong') || lowerMsg.includes('terbakar') || lowerMsg.includes('over') || lowerMsg.includes('hangus') || (lowerMsg.includes('pupuk') && lowerMsg.includes('kuning'))) {
+    return `Salam Tani! 🌱 Tenang Rekan Petani, gejala **daun menguning, ujung mengering, atau tanaman tampak gosong setelah dipupuk** umumnya disebabkan oleh **keracunan hara / efek plasmolisis (fertilizer burn)** akibat konsentrasi larutan pupuk terlalu pekat atau ditabur terlalu dekat ke pangkal batang.
+
+Berikut **Langkah Penyelamatan Darurat (Recovery Protocol)**:
+
+### 1. Pembilasan Cepat (Flushing Air)
+* **Siram Segera dengan Air Bersih Berlimpah:** Lakukan penyiraman air tawar bersih pada area perakaran secara merata di pagi dan sore hari selama 2–3 hari berturut-turut.
+* **Tujuan:** Melarutkan dan mencuci kelebihan garam-garam anorganik (nitrogen & kalium pekat) dari zona perakaran tanaman agar tidak terus menyedot cairan sel akar.
+
+### 2. Hentikan Total Pupuk Kimia Sementara
+* **Puasa Pupuk Kimia:** Stop 100% pemberian pupuk NPK, Urea, ZA, atau pupuk daun kimia keras selama **10 hingga 14 hari ke depan** sampai muncul pucuk/daun baru yang segar.
+
+### 3. Pemulihan Kerusakan Akar (Anti-Stres)
+* Berikan kocor **Asam Humat (Humic Acid)** dengan dosis 2 gram per liter air (atau 20–30 gram per tangki 16L). Asam humat berfungsi mengikat racun garam pupuk, menstabilkan pH tanah, dan mempercepat pembentukan bulu-bulu akar baru.
+* Alternatif lain: Semprotkan **Asam Amino (Amino Acid)** atau ekstrak rumput laut tipis-tipis di kabut pagi hari sebagai stimulan pemulihan sel klorofil daun.
+
+### 4. Pangkas Daun yang Rusak Parah
+* Bila ada daun bawah yang sudah 80% kering atau busuk kecokelatan, pangkas dengan gunting bersih untuk mencegah infeksi jamur sekunder (seperti *Alternaria*).
+
+InsyaAllah dalam 7–10 hari pucuk baru akan mulai trubus kembali. Ada kendala lain di kebun Anda?`;
+  }
+
+  // 2. Kasus Takaran Pupuk Kocor & Dosis Pemupukan
+  if (lowerMsg.includes('takaran') || lowerMsg.includes('dosis') || lowerMsg.includes('kocor') || lowerMsg.includes('pupuk')) {
+    return `Salam Tani! 🌱 Berikut panduan **Rekomendasi Takaran & Jadwal Pemupukan Berimbang** untuk **${plotContext?.crop_name || 'Tanaman Anda'}** (${scale}) pada umur **${hst} HST**:
+
+### 1. Takaran Kocor Presisi (Per Pohon / Batang / Polybag)
+* **Dosis Standar:** Larutkan **10 – 15 gram** pupuk NPK (16-16-16 Mutiara/YaraMila) ke dalam **200 – 250 ml air** (setara 1 gelas aqua) per pohon.
+* **Frekuensi:** Aplikasi kocor tiap **7 – 10 hari sekali** di pagi hari (pukul 06.30 - 09.00) atau sore hari saat tanah sedikit lembap.
+* **Teknik Aplikasi:** Siramkan melingkar di bawah tajuk daun (lingkaran perakaran), **hindari terkena langsung ke pangkal batang utama**.
+
+### 2. Takaran untuk Skala Luasan (Hamparan Lahan)
+* **NPK 16-16-16 Susulan:** 50 – 75 kg per hektar (atau sekitar 5–7 gram per meter persegi).
+* Buat larikan/parit dangkal 10–15 cm dari pangkal tanaman, taburkan pupuk, lalu tutup tipis dengan tanah agar nitrogen tidak menguap.
+
+### 3. Nutrisi Penguat Tambahan
+* Jika memasuki fase vegetatif cepat (${hst} HST), tambahkan sedikit unsur Kalsium Boron untuk mencegah pucuk keriting dan memperkokoh dinding sel batang.`;
+  }
+
+  // 3. Panduan Agronomi Berdasarkan Timeline HST Lahan
   let advice = `Salam Tani! 🌱 Berikut panduan agronomi praktis untuk **${plotContext?.crop_name || 'Tanaman Anda'}** (${scale}) pada fase saat ini (${hst} HST):\n\n`;
 
-  if (hst <= 10) {
-    advice += `### 1. Fase Pemulihan & Perakaran Awal (0 - 10 HST)
+  if (hst <= 12) {
+    advice += `### 1. Fase Pemulihan & Perakaran Awal (0 - 12 HST)
 * **Kebutuhan Air:** Siram secukupnya tiap pagi atau sore hari, pastikan media lembap namun tidak becek tergenang.
 * **Perlindungan:** Pasang ajir/lanjaran bila diperlukan dan amati ada tidaknya gigitan ulat pemotong atau siput.
 * **Nutrisi:** Berikan larutan asam humat atau pupuk hayati organik cair encer untuk merangsang pertumbuhan akar baru.`;
-  } else if (hst <= 30) {
+  } else if (hst <= 35) {
     advice += `### 1. Fase Vegetatif Aktif & Pembentukan Cabang (${hst} HST)
 * **Pemupukan Kocor (Per Pohon/Polybag):** Larutkan 10–15 gram pupuk NPK 16-16-16 dalam 200–250 ml air per pohon tiap 7–10 hari sekali.
 * **Untuk Skala Hamparan/Lahan:** Taburkan 50–75 kg NPK per hektar di parit sela tanaman lalu tutup tipis tanah.
 * **Perompesan (Pewiwilan):** Buang tunas air (wiwil) di ketiak daun di bawah cabang utama (cabang V) agar energi terfokus ke batang utama.
 * **Pencegahan Hama:** Semprotkan pestisida nabati atau insektisida berbahan aktif abamektin tipis-tipis di balik daun untuk mencegah kutu kebul dan thrips.`;
-  } else if (hst <= 60) {
+  } else if (hst <= 65) {
     advice += `### 1. Fase Generatif & Pembungaan (${hst} HST)
 * **Nutrisi Khusus Bunga & Bakal Buah:** Tambahkan unsur Fosfor (P) dan Kalium (K), seperti pupuk MKP (Monokalium Fosfat) atau KNO3 Putih + Kalsium Boron (1 sendok makan per tangki 16L).
 * **Manajemen Bunga:** Hindari penyemprotan kimia keras di pagi hari saat lebah/serangga penyerbuk aktif agar bunga tidak rontok.
@@ -475,7 +508,8 @@ async function generateGeminiContent(params: {
 }) {
   if (!ai) throw new Error('GEMINI_API_KEY belum dikonfigurasi di server.');
 
-  const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+  // Prioritize active, fast, non-deprecated models
+  const models = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.8-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -487,7 +521,7 @@ async function generateGeminiContent(params: {
       if (params.responseMimeType) config.responseMimeType = params.responseMimeType;
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout calling Gemini model')), 4500)
+        setTimeout(() => reject(new Error('Timeout calling Gemini model')), 6500)
       );
 
       const generatePromise = ai.models.generateContent({
@@ -497,6 +531,9 @@ async function generateGeminiContent(params: {
       });
 
       const response = await Promise.race([generatePromise, timeoutPromise]) as any;
+      if (response && response.text) {
+        return response;
+      }
       return response;
     } catch (err: any) {
       lastError = err;
